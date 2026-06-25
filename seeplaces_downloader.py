@@ -58,20 +58,34 @@ def get_token_via_browser() -> str:
     options.add_argument("--window-size=1280,800")
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    # Capture network traffic so we can read the Bearer token off a real API call.
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
     driver = webdriver.Chrome(options=options)
 
     try:
         driver.get(LOGIN_URL)
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 25)
 
-        # Fill email
-        email_field = wait.until(EC.presence_of_element_located((By.NAME, "email")))
-        email_field.clear()
-        email_field.send_keys(EMAIL)
-
-        # Fill password
+        # Wait for the login form to render (SeePlaces now uses a Keycloak SSO page).
         pwd_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+
+        # Find the e-mail/username field — name varies (Keycloak: "username",
+        # older panel: "email"). Try the likely selectors in order.
+        user_field = None
+        for by, sel in [(By.NAME, "username"), (By.NAME, "email"),
+                        (By.ID, "username"),
+                        (By.CSS_SELECTOR, "input[type='email']"),
+                        (By.CSS_SELECTOR, "input[type='text']")]:
+            els = driver.find_elements(by, sel)
+            if els:
+                user_field = els[0]
+                break
+        if user_field is None:
+            raise RuntimeError("Could not find the e-mail/username field on the login page.")
+
+        user_field.clear()
+        user_field.send_keys(EMAIL)
         pwd_field.clear()
         pwd_field.send_keys(PASSWORD)
 
@@ -83,30 +97,27 @@ def get_token_via_browser() -> str:
         print("Logged in! Waiting for app to load...")
         time.sleep(4)
 
-        # Try localStorage / sessionStorage for the token
+        # Primary: the SPA keeps the token in memory and sends it as a Bearer
+        # header on its API calls. Visit a data page to trigger those calls,
+        # then read the Authorization header from the network log.
         token = None
-        for storage in ["localStorage", "sessionStorage"]:
-            token = driver.execute_script(f"""
-                for (const key of Object.keys({storage})) {{
-                    try {{
-                        const val = JSON.parse({storage}.getItem(key));
-                        if (val && val.access_token) return val.access_token;
-                        if (val && val.token) return val.token;
-                    }} catch(e) {{}}
-                }}
-                return null;
-            """)
-            if token:
-                break
+        try:
+            driver.get("https://admin.seeplaces.com/bookings")
+            time.sleep(6)
+            token = _token_from_network_log(driver)
+        except Exception:
+            pass
 
-        # Fallback: scan ALL localStorage values for anything JWT-shaped
+        # Fallback: scan storage for anything JWT-shaped (older panel versions).
         if not token:
             token = driver.execute_script("""
-                for (const key of Object.keys(localStorage)) {
-                    const val = localStorage.getItem(key);
-                    if (val && val.includes('eyJ')) {
-                        const parts = val.match(/eyJ[A-Za-z0-9_\-\.]+/);
-                        if (parts) return parts[0];
+                for (const store of [localStorage, sessionStorage]) {
+                    for (const key of Object.keys(store)) {
+                        const val = store.getItem(key);
+                        if (val && val.includes('eyJ')) {
+                            const parts = val.match(/eyJ[A-Za-z0-9_\\-\\.]+/);
+                            if (parts) return parts[0];
+                        }
                     }
                 }
                 return null;
@@ -120,6 +131,26 @@ def get_token_via_browser() -> str:
 
     finally:
         driver.quit()
+
+
+def _token_from_network_log(driver) -> str | None:
+    """Pull a Bearer token from the captured performance/network log."""
+    try:
+        logs = driver.get_log("performance")
+    except Exception:
+        return None
+    for entry in logs:
+        try:
+            msg = json.loads(entry["message"])["message"]
+            if msg.get("method") != "Network.requestWillBeSent":
+                continue
+            headers = msg["params"]["request"].get("headers", {})
+            for hk, hv in headers.items():
+                if hk.lower() == "authorization" and "bearer" in hv.lower():
+                    return hv
+        except Exception:
+            continue
+    return None
 
 
 def download_report(token: str, date_from: str, date_to: str,
