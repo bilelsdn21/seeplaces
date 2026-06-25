@@ -49,6 +49,12 @@ def _init():
                 currency       TEXT,
                 payment        TEXT,
                 customer       TEXT,
+                pickup_point   TEXT,
+                room           TEXT,
+                pickup_time    TEXT,
+                phone          TEXT,
+                seller         TEXT,
+                notes          TEXT,
                 first_seen     TEXT,
                 last_seen      TEXT,
                 is_new         INTEGER DEFAULT 0,
@@ -58,6 +64,11 @@ def _init():
             )
         """)
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
+        # Migration: add columns introduced after a DB was first created.
+        existing = {r["name"] for r in c.execute("PRAGMA table_info(lines)")}
+        for col in ("pickup_point", "room", "pickup_time", "phone", "seller", "notes"):
+            if col not in existing:
+                c.execute(f"ALTER TABLE lines ADD COLUMN {col} TEXT")
 
 
 _init()
@@ -138,6 +149,11 @@ def parse_lines(xlsx_path: str) -> list[dict]:
         price = pd.to_numeric(r.get(price_col), errors="coerce")
         price = float(price) if pd.notna(price) else 0.0
 
+        # Operational pickup details (these replace the manifest spreadsheet).
+        payment = _s(r, "Payment method")
+        seller  = _s(r, "Expedient email") or ("Online" if payment.lower() == "online" else "")
+        phone   = _s(r, "Participant phone number") or _s(r, "Payer phone number")
+
         lines.append({
             "key":            key,
             "booking_number": booking_no,
@@ -151,8 +167,14 @@ def parse_lines(xlsx_path: str) -> list[dict]:
             "pax":            pax,
             "price":          round(price, 2),
             "currency":       "TND",
-            "payment":        _s(r, "Payment method"),
+            "payment":        payment,
             "customer":       customer,
+            "pickup_point":   _s(r, "Pickup point"),
+            "room":           _s(r, "RoomNumber"),
+            "pickup_time":    _s(r, "PickupTime"),
+            "phone":          phone,
+            "seller":         seller,
+            "notes":          _s(r, "Notes"),
         })
     return lines
 
@@ -160,7 +182,8 @@ def parse_lines(xlsx_path: str) -> list[dict]:
 # ── Diff / sync ─────────────────────────────────────────────────────────────
 _UPDATE_FIELDS = ("booking_number", "voucher", "status", "excursion",
                   "excursion_date", "booking_date", "hotel", "region",
-                  "pax", "price", "currency", "payment", "customer")
+                  "pax", "price", "currency", "payment", "customer",
+                  "pickup_point", "room", "pickup_time", "phone", "seller", "notes")
 
 
 def sync(lines: list[dict]) -> dict:
@@ -187,13 +210,16 @@ def sync(lines: list[dict]) -> dict:
                     """INSERT INTO lines
                        (key, booking_number, voucher, status, excursion,
                         excursion_date, booking_date, hotel, region, pax, price,
-                        currency, payment, customer, first_seen, last_seen,
+                        currency, payment, customer, pickup_point, room,
+                        pickup_time, phone, seller, notes, first_seen, last_seen,
                         is_new, status_changed, entered, entered_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,0,NULL)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,0,NULL)""",
                     (key, ln["booking_number"], ln["voucher"], ln["status"],
                      ln["excursion"], ln["excursion_date"], ln["booking_date"],
                      ln["hotel"], ln["region"], ln["pax"], ln["price"],
-                     ln["currency"], ln["payment"], ln["customer"], now, now))
+                     ln["currency"], ln["payment"], ln["customer"],
+                     ln["pickup_point"], ln["room"], ln["pickup_time"],
+                     ln["phone"], ln["seller"], ln["notes"], now, now))
                 new_lines.append(ln)
             else:
                 prev = existing[key]

@@ -16,9 +16,8 @@ SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 DIR_DOWNLOADS     = os.path.join(BASE_DIR, "outputs", "1 - SeePlaces Downloads")
 DIR_GUIDE_REPORTS = os.path.join(BASE_DIR, "outputs", "2 - Guide Reports")
 DIR_RECONCILE     = os.path.join(BASE_DIR, "outputs", "3 - Reconciliation")
-DIR_MANIFESTS     = os.path.join(BASE_DIR, "outputs", "4 - Manifests")
 
-for d in (UPLOAD_DIR, DIR_DOWNLOADS, DIR_GUIDE_REPORTS, DIR_RECONCILE, DIR_MANIFESTS):
+for d in (UPLOAD_DIR, DIR_DOWNLOADS, DIR_GUIDE_REPORTS, DIR_RECONCILE):
     os.makedirs(d, exist_ok=True)
 sys.path.insert(0, BASE_DIR)
 
@@ -126,7 +125,7 @@ def upload():
 
 @app.route("/api/files/<filename>")
 def serve_output(filename):
-    for folder in (DIR_DOWNLOADS, DIR_GUIDE_REPORTS, DIR_RECONCILE, DIR_MANIFESTS):
+    for folder in (DIR_DOWNLOADS, DIR_GUIDE_REPORTS, DIR_RECONCILE):
         if os.path.exists(os.path.join(folder, filename)):
             return send_from_directory(folder, filename, as_attachment=True)
     return {"error": "File not found"}, 404
@@ -139,7 +138,6 @@ def open_output():
         "downloads":  DIR_DOWNLOADS,
         "guides":     DIR_GUIDE_REPORTS,
         "reconcile":  DIR_RECONCILE,
-        "manifests":  DIR_MANIFESTS,
     }
     folder = folder_map.get(folder_key, os.path.join(BASE_DIR, "outputs"))
     subprocess.Popen(f'explorer "{folder}"')
@@ -438,20 +436,6 @@ def _run_worklist_refresh(job_id, data):
             q.put({"type": "error", "msg": f"❌  {e}"})
         finally:
             sys.stdout = sys.stderr = old
-
-@app.route("/api/worklist/manifest", methods=["POST"])
-def api_worklist_manifest():
-    import worklist, manifest
-    report_path = worklist._meta_get("last_report_path")
-    if not report_path or not os.path.exists(report_path):
-        return {"error": "No data yet — run a refresh first."}, 400
-    out_name = f"booked_excursions_{_ts()}.xlsx"
-    try:
-        summary = manifest.generate(report_path, os.path.join(DIR_MANIFESTS, out_name))
-    except Exception as e:
-        return {"error": str(e)}, 500
-    return {"filename": out_name, "summary": summary}
-
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 

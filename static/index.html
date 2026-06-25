@@ -1222,26 +1222,25 @@
       } catch {}
     }
 
-    function WorklistTab({ isActive }) {
+    function Dashboard() {
       const today = new Date().toISOString().slice(0, 10);
-      const [from, setFrom] = useState(offsetDate(7));      // 7 days back
-      const [to,   setTo]   = useState(offsetDate(-45));    // 45 days ahead
-      const [state, setState]   = useState("idle");         // idle | running
+      const [from] = useState(offsetDate(1));      // yesterday
+      const [to]   = useState(offsetDate(-60));     // 60 days ahead
+      const [state, setState]   = useState("idle"); // idle | running
       const [logs, setLogs]     = useState([]);
       const [err, setErr]       = useState("");
       const [wl, setWl]         = useState(null);
-      const [banner, setBanner] = useState(null);           // { new, cancelled }
+      const [banner, setBanner] = useState(null);    // { new, cancelled }
       const [auto, setAuto]     = useState(() => localStorage.getItem("sp_wl_auto") !== "0");
-      const [mState, setMState] = useState("idle");         // manifest: idle|running|done|error
-      const [mResult, setMResult] = useState(null);
-      const timerRef = useRef(null);
+      const [view, setView]     = useState("today"); // today | all
+      const [expanded, setExpanded] = useState({});  // excursion -> bool
+      const [now, setNow]       = useState(Date.now());
       const runningRef = useRef(false);
+      const nextAtRef  = useRef(Date.now());          // when the next auto-check is due
+      const intervalMs = 10 * 60 * 1000;              // auto-check every 10 minutes
 
       const loadWorklist = useCallback(async () => {
-        try {
-          const r = await fetch("/api/worklist");
-          setWl(await r.json());
-        } catch {}
+        try { const r = await fetch("/api/worklist"); setWl(await r.json()); } catch {}
       }, []);
 
       useEffect(() => { loadWorklist(); }, [loadWorklist]);
@@ -1249,6 +1248,7 @@
       const doRefresh = useCallback(() => {
         if (runningRef.current) return;
         runningRef.current = true;
+        nextAtRef.current = Date.now() + intervalMs;
         setState("running"); setErr(""); setLogs([]); setBanner(null);
         runJob("/api/worklist/refresh", { dateFrom: from, dateTo: to },
           (msg) => setLogs(l => [...l, msg]),
@@ -1261,89 +1261,114 @@
               const parts = [];
               if (n > 0)  parts.push(`${n} new booking${n !== 1 ? "s" : ""}`);
               if (ca > 0) parts.push(`${ca} cancelled`);
-              notifyDesktop("SeePlaces — Worklist", parts.join(" · "));
+              notifyDesktop("SeePlaces — new activity", parts.join(" · "));
             }
             loadWorklist();
           },
           (msg) => { runningRef.current = false; setState("idle"); setErr(msg); });
-      }, [from, to, loadWorklist]);
+      }, [from, to, loadWorklist, intervalMs]);
 
-      // Auto-refresh every 15 minutes while enabled.
+      // 1-second ticker drives the countdown and the auto-check schedule.
+      useEffect(() => {
+        const t = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(t);
+      }, []);
       useEffect(() => {
         localStorage.setItem("sp_wl_auto", auto ? "1" : "0");
-        if (timerRef.current) clearInterval(timerRef.current);
-        if (auto) timerRef.current = setInterval(() => doRefresh(), 15 * 60 * 1000);
-        return () => { if (timerRef.current) clearInterval(timerRef.current); };
-      }, [auto, doRefresh]);
+        if (!auto) return;
+        if (now >= nextAtRef.current && !runningRef.current) {
+          nextAtRef.current = Date.now() + intervalMs;
+          doRefresh();
+        }
+      }, [auto, now, doRefresh, intervalMs]);
 
-      async function toggleEntered(key, entered) {
-        // optimistic
+      async function toggleEntered(key) {
         setWl(prev => {
           if (!prev) return prev;
-          const groups = prev.groups.map(g => ({
-            ...g,
-            lines: g.lines.filter(l => l.key !== key),
-          })).filter(g => g.lines.length > 0);
+          const groups = prev.groups.map(g => ({ ...g, lines: g.lines.filter(l => l.key !== key) }))
+                                    .filter(g => g.lines.length > 0);
           return { ...prev, groups, open_count: Math.max(0, prev.open_count - 1),
                    done_count: prev.done_count + 1 };
         });
         try {
-          await fetch("/api/worklist/entered", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ key, entered }),
-          });
+          await fetch("/api/worklist/entered", { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, entered: true }) });
         } catch {}
       }
 
-      async function genManifest() {
-        setMState("running"); setMResult(null);
-        try {
-          const r = await fetch("/api/worklist/manifest", { method: "POST",
-            headers: { "Content-Type": "application/json" }, body: "{}" });
-          const d = await r.json();
-          if (!r.ok || d.error) { setMState("error"); setMResult({ error: d.error || "Failed" }); return; }
-          setMState("done"); setMResult(d);
-        } catch (e) { setMState("error"); setMResult({ error: e.message }); }
-      }
+      const toggleExpand = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
       const fmtSync = (s) => {
         if (!s) return "never";
-        try { return new Date(s.replace(" ", "T")).toLocaleString(); } catch { return s; }
+        try { return new Date(s.replace(" ", "T")).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+        catch { return s; }
       };
+      const fmtCountdown = (ms) => {
+        const sec = Math.max(0, Math.floor(ms / 1000));
+        return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+      };
+
+      // Build the displayed list from the open worklist.
+      const allLines = wl ? wl.groups.flatMap(g => g.lines) : [];
+      const isToday  = (l) => (l.excursion_date || "").slice(0, 10) === today;
+      const shown    = view === "today" ? allLines.filter(isToday) : allLines;
+
+      const gmap = {};
+      shown.forEach(l => {
+        const k = l.excursion;
+        if (!gmap[k]) gmap[k] = { excursion: k, lines: [], pax: 0, new: 0, cancelled: 0, dates: new Set() };
+        const g = gmap[k];
+        g.lines.push(l);
+        if (l.excursion_date) g.dates.add(l.excursion_date.slice(0, 10));
+        if (l.status === "Cancelled") g.cancelled++; else g.pax += l.pax || 0;
+        if (l.is_new) g.new++;
+      });
+      const displayGroups = Object.values(gmap).sort((a, b) =>
+        (b.new - a.new) || (b.cancelled - a.cancelled) || a.excursion.localeCompare(b.excursion));
+      displayGroups.forEach(g => {
+        const ds = [...g.dates];
+        g.dateLabel = ds.length === 1 ? ds[0] : (ds.length > 1 ? `${ds.length} dates` : "");
+      });
+
+      const stToEnter = shown.filter(l => l.status !== "Cancelled").length;
+      const stNew     = shown.filter(l => l.is_new).length;
+      const stPax     = shown.filter(l => l.status !== "Cancelled").reduce((s, l) => s + (l.pax || 0), 0);
+      const stCancel  = shown.filter(l => l.status === "Cancelled").length;
+      const cntToday  = allLines.filter(isToday).length;
+      const cntAll    = allLines.length;
+      const remaining = (auto && state !== "running") ? (nextAtRef.current - now) : 0;
+
+      const stat = (label, value, color) => (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3 text-center">
+          <p className={`text-2xl font-bold ${color}`}>{value}</p>
+          <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
+        </div>
+      );
 
       return (
         <div>
-          <Card>
-            <SectionTitle>Live worklist — new bookings watcher</SectionTitle>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div><Label>Excursion date from</Label>
-                <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} /></div>
-              <div><Label>Excursion date to</Label>
-                <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} /></div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Btn onClick={doRefresh} loading={state === "running"} className="flex-1">
-                {state === "running" ? "Checking…" : "Check now"}
-              </Btn>
+          {/* Live status bar */}
+          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3">
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <span className={`h-2.5 w-2.5 rounded-full ${state === "running" ? "bg-amber-400 animate-pulse" : auto ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+              {state === "running" ? "Checking SeePlaces…" : auto ? "Live" : "Paused"}
+            </span>
+            <span className="text-xs text-slate-500">
+              Updated {fmtSync(wl && wl.last_sync)}
+              {remaining > 0 && <> · next in {fmtCountdown(remaining)}</>}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setAuto(a => !a)}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition
-                  ${auto ? "border-emerald-700/50 bg-emerald-950/30 text-emerald-300"
-                          : "border-slate-700 bg-slate-800 text-slate-400"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${auto ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
-                Auto 15 min {auto ? "on" : "off"}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${auto ? "border-emerald-700/50 bg-emerald-950/30 text-emerald-300" : "border-slate-700 bg-slate-800 text-slate-400"}`}>
+                {auto ? "Auto on" : "Auto off"}
               </button>
+              <Btn onClick={doRefresh} loading={state === "running"} className="px-3 py-2 text-xs">Check now</Btn>
             </div>
+            {state === "running" && <div className="w-full"><ProgressCard logs={logs} /></div>}
+            {err && <div className="w-full"><ErrorCard msg={err} /></div>}
+          </div>
 
-            <p className="mt-3 text-[11px] text-slate-600">
-              Last check: {fmtSync(wl?.last_sync)}
-            </p>
-
-            {state === "running" && <ProgressCard logs={logs} />}
-            {err && <ErrorCard msg={err} />}
-          </Card>
-
-          {/* New-bookings banner */}
+          {/* New-activity banner */}
           {banner && (
             <div className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-600/50 bg-amber-950/30 px-4 py-3">
               <svg className="h-5 w-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -1359,95 +1384,104 @@
             </div>
           )}
 
-          {/* Stats */}
-          {wl && (
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {[
-                { label: "To enter", value: wl.open_count, color: "text-indigo-400" },
-                { label: "New",      value: wl.new_count,  color: "text-amber-400" },
-                { label: "Pax",      value: wl.open_pax,   color: "text-slate-200" },
-                { label: "Done",     value: wl.done_count, color: "text-emerald-400" },
-              ].map((s, i) => (
-                <div key={i} className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-center">
-                  <p className={`text-xl font-bold ${s.color}`}>{s.value ?? 0}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-600">{s.label}</p>
-                </div>
-              ))}
+          {/* Today / All toggle */}
+          <div className="mb-4 inline-flex rounded-xl border border-slate-800 bg-slate-900/50 p-1">
+            <button onClick={() => setView("today")}
+              className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${view === "today" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>
+              Today ({cntToday})
+            </button>
+            <button onClick={() => setView("all")}
+              className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${view === "all" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>
+              All upcoming ({cntAll})
+            </button>
+          </div>
+
+          {/* Overview */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+            {stat("To enter", stToEnter, "text-indigo-400")}
+            {stat("New", stNew, "text-amber-400")}
+            {stat("Pax", stPax, "text-slate-200")}
+            {stat("Cancelled", stCancel, "text-red-400")}
+          </div>
+
+          {/* Excursions */}
+          {wl == null && <p className="py-6 text-center text-sm text-slate-500">Loading…</p>}
+          {wl && displayGroups.length === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 text-center text-sm text-slate-500">
+              {view === "today" ? "No excursions for today yet." : "Nothing to enter."}{" "}
+              {state !== "running" && "Press “Check now” to pull the latest bookings."}
             </div>
           )}
 
-          {/* Manifest generator */}
-          <Card>
-            <SectionTitle>Booked excursions list (manifest)</SectionTitle>
-            <p className="text-xs text-slate-500 mb-3">
-              Build the per-excursion pickup manifest from the latest check — one sheet per excursion, ready to read.
-            </p>
-            <Btn onClick={genManifest} loading={mState === "running"} variant="secondary" className="w-full">
-              Generate manifest Excel
-            </Btn>
-            {mState === "done" && mResult && (
-              <ResultCard filename={mResult.filename} folder="manifests">
-                <p className="text-sm text-slate-300">
-                  {mResult.summary?.sheets} excursion{mResult.summary?.sheets !== 1 ? "s" : ""} ·{" "}
-                  {mResult.summary?.bookings} booking{mResult.summary?.bookings !== 1 ? "s" : ""} ·{" "}
-                  {mResult.summary?.pax} pax
-                </p>
-              </ResultCard>
-            )}
-            {mState === "error" && mResult && <ErrorCard msg={mResult.error} />}
-          </Card>
+          {wl && displayGroups.map(g => {
+            const open = !!expanded[g.excursion];
+            return (
+              <div key={g.excursion} className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+                <button onClick={() => toggleExpand(g.excursion)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-800/40">
+                  <svg className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${open ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-200">{g.excursion}</p>
+                    <p className="text-[11px] text-slate-500">{g.dateLabel}{g.dateLabel ? " · " : ""}{g.lines.length} booking{g.lines.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  {g.new > 0 && <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">{g.new} NEW</span>}
+                  {g.cancelled > 0 && <span className="shrink-0 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">{g.cancelled} CANCEL</span>}
+                  <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">{g.pax} pax</span>
+                </button>
 
-          {/* Worklist groups */}
-          {wl && wl.groups.length === 0 && (
-            <Card><p className="text-sm text-slate-500 text-center py-4">
-              Nothing to enter. Run a check to pull the latest bookings.
-            </p></Card>
-          )}
-
-          {wl && wl.groups.map((g) => (
-            <div key={g.excursion} className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-              <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900/70 px-4 py-2.5">
-                <p className="flex-1 text-sm font-semibold text-slate-200 truncate">{g.excursion}</p>
-                {g.new > 0 && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">{g.new} NEW</span>}
-                {g.cancelled > 0 && <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">{g.cancelled} CANCEL</span>}
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">{g.pax} pax</span>
+                {open && (
+                  <div className="overflow-x-auto border-t border-slate-800">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-900/70 text-[10px] uppercase tracking-wide text-slate-500">
+                          <th className="px-2 py-2 font-semibold">Done</th>
+                          <th className="px-2 py-2 font-semibold">Name</th>
+                          <th className="px-2 py-2 font-semibold">Hotel</th>
+                          <th className="px-2 py-2 font-semibold">Room</th>
+                          <th className="px-2 py-2 font-semibold">Pickup</th>
+                          <th className="px-2 py-2 font-semibold">Phone</th>
+                          <th className="px-2 py-2 font-semibold">Seller</th>
+                          <th className="px-2 py-2 font-semibold">Voucher</th>
+                          <th className="px-2 py-2 font-semibold">Booking</th>
+                          <th className="px-2 py-2 text-right font-semibold">Pax</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/70">
+                        {g.lines.map(l => {
+                          const cancelled = l.status === "Cancelled";
+                          return (
+                            <tr key={l.key} className={cancelled ? "bg-red-950/20" : "hover:bg-slate-800/30"}>
+                              <td className="px-2 py-2 align-top">
+                                <input type="checkbox" checked={false} onChange={() => toggleEntered(l.key)}
+                                  title="Mark as entered into our system"
+                                  className="h-4 w-4 cursor-pointer rounded border-slate-600 accent-emerald-500" />
+                              </td>
+                              <td className="px-2 py-2 align-top">
+                                <span className={`font-medium ${cancelled ? "text-red-300 line-through" : "text-slate-200"}`}>{l.customer || "—"}</span>
+                                {l.is_new && <span className="ml-1 rounded bg-amber-500/20 px-1 text-[9px] font-bold text-amber-300">NEW</span>}
+                                {cancelled && <span className="ml-1 rounded bg-red-500/20 px-1 text-[9px] font-bold text-red-300">CANC</span>}
+                              </td>
+                              <td className="px-2 py-2 align-top text-slate-400">{l.hotel || "—"}</td>
+                              <td className="px-2 py-2 align-top text-slate-400">{l.room || "—"}</td>
+                              <td className="px-2 py-2 align-top text-slate-400">{l.pickup_time || "—"}</td>
+                              <td className="whitespace-nowrap px-2 py-2 align-top text-slate-400">{l.phone || "—"}</td>
+                              <td className="px-2 py-2 align-top text-slate-400">{l.seller || "—"}</td>
+                              <td className="px-2 py-2 align-top text-slate-400">{l.voucher || "—"}</td>
+                              <td className="whitespace-nowrap px-2 py-2 align-top text-slate-400">{l.booking_number || "—"}</td>
+                              <td className="px-2 py-2 text-right align-top font-semibold text-slate-300">{l.pax}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-              <div className="divide-y divide-slate-800/70">
-                {g.lines.map((l) => {
-                  const cancelled = l.status === "Cancelled";
-                  return (
-                    <label key={l.key}
-                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition
-                        ${cancelled ? "bg-red-950/20 hover:bg-red-950/30" : "hover:bg-slate-800/40"}`}>
-                      <input type="checkbox" checked={false} onChange={() => toggleEntered(l.key, true)}
-                        className="h-4 w-4 shrink-0 rounded border-slate-600 accent-emerald-500 cursor-pointer" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium truncate ${cancelled ? "text-red-300 line-through" : "text-slate-200"}`}>
-                            {l.customer || "(no name)"}
-                          </span>
-                          {l.is_new && <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">NEW</span>}
-                          {cancelled && <span className="shrink-0 rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-300">CANCELLED</span>}
-                        </div>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {l.hotel}{l.excursion_date ? ` · ${l.excursion_date}` : ""}{l.payment ? ` · ${l.payment}` : ""}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-xs font-semibold text-slate-300">{l.pax} pax</p>
-                        <p className="text-[10px] text-slate-600">{l.booking_number}</p>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {wl && wl.done_count > 0 && (
-            <p className="text-center text-[11px] text-slate-600 mb-2">
-              {wl.done_count} reservation{wl.done_count !== 1 ? "s" : ""} already entered ✓
-            </p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">{wl.done_count} entered ✓</p>
           )}
         </div>
       );
@@ -1456,37 +1490,13 @@
     // ═════════════════════════════════════════════════════════════════════════
     // APP ROOT
     // ═════════════════════════════════════════════════════════════════════════
-    const TABS = [
-      { id: "worklist", label: "Worklist",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> },
-      { id: "download", label: "Download",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> },
-      { id: "guides", label: "Guide Report",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
-      { id: "reconcile", label: "Reconcile",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><line x1="7" y1="12" x2="17" y2="12"/></svg> },
-      { id: "hotels", label: "Hotels",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
-      { id: "analytics", label: "Analytics",
-        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
-    ];
-
     function App() {
-      const [tab, setTab]               = useState("worklist");
-      const [lastDownload, setLastDownload] = useState(() => {
-        try { const s = localStorage.getItem("sp_lastDownload"); return s ? JSON.parse(s) : null; } catch { return null; }
-      });
-      const [dark, setDark] = useState(() => localStorage.getItem("sp_theme") !== "light");
+      const [dark, setDark] = useState(() => localStorage.getItem("sp_theme") === "dark");
 
       useEffect(() => {
         document.documentElement.classList.toggle("light", !dark);
         localStorage.setItem("sp_theme", dark ? "dark" : "light");
       }, [dark]);
-
-      const setAndPersistDownload = React.useCallback((val) => {
-        setLastDownload(val);
-        try { if (val) localStorage.setItem("sp_lastDownload", JSON.stringify(val)); else localStorage.removeItem("sp_lastDownload"); } catch {}
-      }, []);
 
       return (
         <div className="flex h-screen flex-col bg-slate-950 overflow-hidden">
@@ -1494,46 +1504,21 @@
           <header className="shrink-0 flex items-center gap-3 border-b border-slate-800/80 bg-slate-900/70 px-5 py-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-xs font-bold text-white shadow-lg shadow-indigo-950">SP</div>
             <div>
-              <h1 className="text-sm font-semibold leading-none">SeePlaces Tools</h1>
-              <p className="mt-0.5 text-[11px] text-slate-600">Internal reports dashboard</p>
+              <h1 className="text-sm font-semibold leading-none">Today’s Bookings</h1>
+              <p className="mt-0.5 text-[11px] text-slate-500">SeePlaces live worklist</p>
             </div>
-            {lastDownload && (
-              <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-indigo-800/40 bg-indigo-950/40 px-2.5 py-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse"/>
-                <span className="text-xs text-indigo-400 max-w-[200px] truncate">{lastDownload.name}</span>
-              </div>
-            )}
+            <button onClick={() => setDark(d => !d)} title={dark ? "Switch to light mode" : "Switch to dark mode"}
+              className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-300 transition">
+              {dark
+                ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              }
+            </button>
           </header>
 
-          {/* tabs */}
-          <div className="shrink-0 border-b border-slate-800/80 bg-slate-900/30 px-5">
-            <div className="flex -mb-px gap-0.5 items-center">
-              {TABS.map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all
-                    ${tab === t.id ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-300"}`}>
-                  {t.icon}{t.label}
-                </button>
-              ))}
-              <button onClick={() => setDark(d => !d)} title={dark ? "Switch to light mode" : "Switch to dark mode"}
-                className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-300 transition mb-px">
-                {dark
-                  ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                  : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                }
-              </button>
-            </div>
-          </div>
-
-          {/* content — all tabs stay mounted so state survives tab switches */}
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-lg px-5 py-6">
-              <div style={{ display: tab === "worklist"  ? "block" : "none" }}><WorklistTab   isActive={tab === "worklist"} /></div>
-              <div style={{ display: tab === "download"  ? "block" : "none" }}><DownloadTab   onDownloaded={setAndPersistDownload} /></div>
-              <div style={{ display: tab === "guides"    ? "block" : "none" }}><GuideReportTab lastDownload={lastDownload} /></div>
-              <div style={{ display: tab === "reconcile" ? "block" : "none" }}><ReconcileTab   lastDownload={lastDownload} /></div>
-              <div style={{ display: tab === "hotels"    ? "block" : "none" }}><HotelsTab /></div>
-              <div style={{ display: tab === "analytics" ? "block" : "none" }}><AnalyticsTab isActive={tab === "analytics"} /></div>
+            <div className="mx-auto max-w-4xl px-4 py-6">
+              <Dashboard />
             </div>
           </main>
         </div>
