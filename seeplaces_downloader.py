@@ -58,6 +58,10 @@ REPS = {
 # ─────────────────────────────────────────────
 
 
+class InvalidCredentials(RuntimeError):
+    """Raised when SeePlaces rejects the email/password — no point retrying."""
+
+
 def get_token() -> str:
     """Return an access token, preferring the fast HTTP login over the browser."""
     try:
@@ -65,6 +69,8 @@ def get_token() -> str:
         token = get_token_via_http()
         print("Token obtained.")
         return token
+    except InvalidCredentials:
+        raise  # creds are wrong/rejected — the browser would fail too (and is slow)
     except Exception as e:
         print(f"Fast login unavailable ({e}); falling back to browser login...")
         return get_token_via_browser()
@@ -106,7 +112,8 @@ def get_token_via_http() -> str:
                 data={"username": EMAIL, "password": PASSWORD, "credentialId": ""})
     loc = r2.headers.get("Location", "")
     if "code=" not in loc:
-        raise RuntimeError("Login rejected — check the SeePlaces email/password.")
+        raise InvalidCredentials("SeePlaces rejected the login — the email or "
+                                 "password is incorrect (check for typos/extra spaces).")
 
     parsed = urllib.parse.urlparse(loc)
     code = urllib.parse.parse_qs(parsed.fragment or parsed.query).get("code", [None])[0]

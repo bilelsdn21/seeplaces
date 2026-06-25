@@ -56,8 +56,10 @@ def _ts():
 
 def _load_settings():
     # Hosted deployments inject credentials via env vars (kept out of the repo).
-    env_email = os.environ.get("SEEPLACES_EMAIL")
-    env_pw    = os.environ.get("SEEPLACES_PASSWORD")
+    # Strip whitespace — a trailing space/newline pasted into the host dashboard
+    # is a common cause of "invalid username or password".
+    env_email = (os.environ.get("SEEPLACES_EMAIL") or "").strip()
+    env_pw    = (os.environ.get("SEEPLACES_PASSWORD") or "").strip()
     if env_email and env_pw:
         return {"email": env_email, "password": env_pw}
     # Local fallback: settings.json (gitignored) if present.
