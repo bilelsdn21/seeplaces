@@ -1222,6 +1222,21 @@
       } catch {}
     }
 
+    // Retry transient 502/503/504s (Render free tier waking from sleep / deploying).
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    async function fetchRetry(url, opts = {}, delays = [3000, 6000, 10000]) {
+      for (let i = 0; ; i++) {
+        try {
+          const r = await fetch(url, opts);
+          if ([502, 503, 504].includes(r.status) && i < delays.length) { await sleep(delays[i]); continue; }
+          return r;
+        } catch (e) {
+          if (i < delays.length) { await sleep(delays[i]); continue; }
+          throw e;
+        }
+      }
+    }
+
     function Dashboard() {
       const today = new Date().toISOString().slice(0, 10);
       const [day, setDay]       = useState(today);   // selected excursion day
@@ -1243,7 +1258,7 @@
 
       const loadDay = useCallback(async (d) => {
         try {
-          const r = await fetch(`/api/worklist/day?date=${d}`);
+          const r = await fetchRetry(`/api/worklist/day?date=${d}`);
           const j = await r.json();
           setData(j);
           setTickets(prev => {
@@ -1262,11 +1277,13 @@
         nextAtRef.current = Date.now() + intervalMs;
         setState("running"); setErr(""); setBanner(null);
         try {
-          const r = await fetch("/api/worklist/refresh", {
+          const r = await fetchRetry("/api/worklist/refresh", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ dateFrom: d, dateTo: d }),
           });
           const j = await r.json().catch(() => ({}));
+          if ([502, 503, 504].includes(r.status))
+            throw new Error("Server is waking up (free tier sleeps when idle). Try again in ~30s.");
           if (!r.ok || j.error) throw new Error(j.error || `Server error ${r.status}`);
           const n = j.new_count || 0, ca = j.cancelled_count || 0;
           if (n > 0 || ca > 0) {
