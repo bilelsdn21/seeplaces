@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Secrets & local state (never push these)
+settings.json
+*.db
+
+# Runtime data — contains real customer names / phone numbers
+uploads/
+outputs/
+
+# Sample / working spreadsheets
+*.xlsx
+*.xlsm
+*.XLSX
+
+# Editor / tooling
+.claude/
+.vscode/
+.DS_Store

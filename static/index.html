@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SeePlaces Tools</title>
+  <!-- Libraries are vendored locally in static/vendor/ so the app works fully offline. -->
+  <script src="/static/vendor/tailwind.js"></script>
+  <script src="/static/vendor/react.production.min.js"></script>
+  <script src="/static/vendor/react-dom.production.min.js"></script>
+  <script src="/static/vendor/babel.min.js"></script>
+  <script src="/static/vendor/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #0f172a; font-family: "Inter", sans-serif; color: #f1f5f9; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+    select option { background: #1e293b; }
+
+    /* ── CSS variable for inline-style inactive button bg ── */
+    :root { --inactive-bg: #1e293b; }
+
+    /* ════════════════ LIGHT MODE ════════════════ */
+    html.light { color-scheme: light; --inactive-bg: #e2e8f0; }
+    html.light body { background: #f8fafc; color: #0f172a; }
+    html.light ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+    html.light select option { background: #fff; }
+    html.light input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
+
+    /* backgrounds */
+    html.light .bg-slate-950  { background-color: #f1f5f9 !important; }
+    html.light .bg-slate-900  { background-color: #ffffff !important; }
+    html.light .bg-slate-800  { background-color: #e2e8f0 !important; }
+    html.light .bg-slate-900\/50, html.light .bg-slate-900\/60,
+    html.light .bg-slate-900\/40 { background-color: rgba(248,250,252,.92) !important; }
+    html.light .bg-slate-900\/70 { background-color: rgba(255,255,255,.96) !important; }
+    html.light .bg-slate-900\/30 { background-color: rgba(241,245,249,.65) !important; }
+    html.light .bg-slate-800\/70 { background-color: #f1f5f9 !important; }
+    html.light .bg-emerald-950\/30 { background-color: #ecfdf5 !important; }
+    html.light .bg-emerald-950\/20 { background-color: #f0fdf4 !important; }
+    html.light .bg-emerald-900\/60 { background-color: #d1fae5 !important; }
+    html.light .bg-red-950\/20    { background-color: #fff5f5 !important; }
+    html.light .bg-indigo-950\/40 { background-color: #eef2ff !important; }
+    html.light .bg-indigo-950\/30 { background-color: #f0f4ff !important; }
+    html.light .hover\:bg-red-950\/30:hover { background-color: #fee2e2 !important; }
+
+    /* text */
+    html.light .text-slate-100 { color: #0f172a !important; }
+    html.light .text-slate-200 { color: #1e293b !important; }
+    html.light .text-slate-300 { color: #334155 !important; }
+    html.light .text-slate-400 { color: #475569 !important; }
+    html.light .text-slate-500 { color: #64748b !important; }
+    html.light .text-slate-600 { color: #94a3b8 !important; }
+    html.light .text-slate-700 { color: #94a3b8 !important; }
+    html.light .hover\:text-slate-300:hover { color: #334155 !important; }
+    html.light .hover\:text-slate-100:hover { color: #0f172a !important; }
+    html.light .placeholder-slate-600::placeholder { color: #94a3b8 !important; }
+    html.light .text-emerald-300 { color: #059669 !important; }
+    html.light .text-emerald-400 { color: #10b981 !important; }
+    html.light .text-emerald-500 { color: #059669 !important; }
+    html.light .text-indigo-400  { color: #4f46e5 !important; }
+    html.light .text-red-300\/60 { color: rgba(239,68,68,.85) !important; }
+    html.light .text-red-400     { color: #dc2626 !important; }
+
+    /* borders */
+    html.light .border-slate-800,
+    html.light .border-slate-800\/80 { border-color: #e2e8f0 !important; }
+    html.light .border-slate-700     { border-color: #cbd5e1 !important; }
+    html.light .border-slate-600     { border-color: #94a3b8 !important; }
+    html.light .border-emerald-800\/50 { border-color: #6ee7b7 !important; }
+    html.light .border-emerald-800\/40 { border-color: #6ee7b7 !important; }
+    html.light .border-red-900\/50     { border-color: #fca5a5 !important; }
+    html.light .border-indigo-800\/40  { border-color: #a5b4fc !important; }
+    html.light .hover\:border-slate-500:hover { border-color: #94a3b8 !important; }
+    html.light .hover\:border-slate-600:hover { border-color: #94a3b8 !important; }
+    html.light .hover\:border-slate-700:hover { border-color: #cbd5e1 !important; }
+    html.light .divide-slate-700 > * + * { border-color: #e2e8f0 !important; }
+
+    /* misc */
+    html.light .bg-slate-900.text-slate-300 { color: #334155 !important; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#475569;font-size:13px;">Loading…</div>
+  </div>
+
+  <!-- ── Diagnostic: surface any startup error on screen instead of a silent "Loading…" ── -->
+  <script>
+    function __showErr(title, detail) {
+      var el = document.getElementById('root');
+      if (!el) return;
+      el.innerHTML =
+        '<div style="padding:24px;font-family:monospace;color:#fca5a5;background:#0f172a;height:100vh;overflow:auto;">' +
+        '<div style="font-size:15px;color:#f87171;margin-bottom:10px;">⚠ ' + title + '</div>' +
+        '<pre style="white-space:pre-wrap;color:#fbbf24;font-size:12px;">' + detail + '</pre></div>';
+    }
+    window.addEventListener('error', function (e) {
+      __showErr('Startup error', (e.message || e.error || 'unknown') + '\n\n' + ((e.error && e.error.stack) || '') + '\nsource: ' + (e.filename || '') + ':' + (e.lineno || ''));
+    });
+    window.addEventListener('DOMContentLoaded', function () {
+      var missing = [];
+      if (typeof React === 'undefined')     missing.push('React');
+      if (typeof ReactDOM === 'undefined')  missing.push('ReactDOM');
+      if (typeof Babel === 'undefined')      missing.push('Babel');
+      if (typeof Chart === 'undefined')      missing.push('Chart.js');
+      if (missing.length) __showErr('Libraries did not load: ' + missing.join(', '),
+        'These files in static/vendor/ failed to load or run. Check the vendor folder exists next to index.html.');
+    });
+  </script>
+
+  <script type="text/plain" id="app-source">
+    const { useState, useRef, useCallback, useEffect } = React;
+
+    // ── Global constants ──────────────────────────────────────────────────────
+    const GUIDES      = ["kasha", "aneta", "joanna"];
+    const GUIDE_COLOR = { kasha: "#4F46E5", aneta: "#0891B2", joanna: "#059669" };
+    const GUIDE_DIM   = { kasha: "#312e81", aneta: "#164e63", joanna: "#14532d" };
+
+    // ── SSE job runner ────────────────────────────────────────────────────────
+    async function runJob(endpoint, payload, onLog, onDone, onError) {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const { job_id } = await res.json();
+        const es = new EventSource(`/api/stream/${job_id}`);
+        es.onmessage = (e) => {
+          const d = JSON.parse(e.data);
+          if (d.type === "ping")          return;
+          if (d.type === "log" || d.type === "step") onLog(d.msg);
+          if (d.type === "done")          { onDone(d);    es.close(); }
+          if (d.type === "error")         { onError(d.msg); es.close(); }
+        };
+        es.onerror = () => { onError("Connection lost."); es.close(); };
+      } catch (err) { onError(err.message); }
+    }
+
+    // ── File upload ───────────────────────────────────────────────────────────
+    async function uploadFile(file) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      return res.json(); // { path, name }
+    }
+
+    // ── Shared UI atoms ───────────────────────────────────────────────────────
+    const inp = "w-full rounded-xl border border-slate-700 bg-slate-800/70 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40";
+
+    function Label({ children }) {
+      return <p className="text-xs font-medium text-slate-400 mb-1.5">{children}</p>;
+    }
+
+    function Card({ children, className = "" }) {
+      return <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 mb-4 ${className}`}>{children}</div>;
+    }
+
+    function SectionTitle({ children }) {
+      return <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-4">{children}</p>;
+    }
+
+    function Btn({ onClick, loading, disabled, children, variant = "primary", className = "" }) {
+      const base = "flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[.98]";
+      const styles = {
+        primary:  "bg-indigo-600 text-white shadow-lg shadow-indigo-950/50 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none",
+        secondary:"border border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+        danger:   "text-red-400 hover:text-red-300",
+      };
+      return (
+        <button onClick={onClick} disabled={disabled || loading} className={`${base} ${styles[variant]} ${className}`}>
+          {loading && <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+          {children}
+        </button>
+      );
+    }
+
+    // ── Drop zone ─────────────────────────────────────────────────────────────
+    function DropZone({ file, onFile, label = "Drop your file here" }) {
+      const [over, setOver] = useState(false);
+      const ref = useRef();
+
+      async function handle(f) {
+        if (!f) return;
+        onFile({ name: f.name, path: null, uploading: true });
+        try {
+          const r = await uploadFile(f);
+          onFile({ name: r.name, path: r.path });
+        } catch { onFile(null); }
+      }
+
+      if (file?.uploading) return (
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3.5">
+          <svg className="animate-spin h-5 w-5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          <p className="text-sm text-slate-400">Uploading {file.name}…</p>
+        </div>
+      );
+
+      if (file?.path) return (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-800/50 bg-emerald-950/30 px-4 py-3.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-900/60">
+            <svg className="h-4 w-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <p className="flex-1 truncate text-sm font-medium text-emerald-300">{file.name}</p>
+          <button onClick={() => onFile(null)} className="shrink-0 p-1 text-slate-600 hover:text-slate-400 transition rounded-lg hover:bg-slate-800">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      );
+
+      return (
+        <div
+          onDragOver={e => { e.preventDefault(); setOver(true); }}
+          onDragLeave={() => setOver(false)}
+          onDrop={e => { e.preventDefault(); setOver(false); handle(e.dataTransfer.files[0]); }}
+          onClick={() => ref.current?.click()}
+          className={`cursor-pointer select-none rounded-2xl border-2 border-dashed px-6 py-7 text-center transition-all
+            ${over ? "border-indigo-400 bg-indigo-950/30 scale-[1.01]" : "border-slate-700 bg-slate-900/30 hover:border-slate-500"}`}
+        >
+          <input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { handle(e.target.files[0]); e.target.value = ""; }} />
+          <div className={`mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl transition ${over ? "bg-indigo-600" : "bg-slate-800"}`}>
+            <svg className={`h-5 w-5 ${over ? "text-white" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p className={`text-sm font-medium ${over ? "text-indigo-300" : "text-slate-300"}`}>{label}</p>
+          <p className="mt-1 text-xs text-slate-600">or click to choose a file (.xlsx)</p>
+        </div>
+      );
+    }
+
+    // ── Progress card (while job runs) ────────────────────────────────────────
+    function ProgressCard({ logs }) {
+      const ref = useRef();
+      useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
+      const steps = ["Logging in to SeePlaces…", "Downloading online report…", "Building guide report…"];
+      return (
+        <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="animate-spin h-4 w-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+            <span className="text-sm font-medium text-slate-300">Working…</span>
+          </div>
+          {logs.length > 0 && (
+            <div className="font-mono text-xs space-y-1 max-h-32 overflow-y-auto">
+              {logs.map((l, i) => (
+                <div key={i} className="flex gap-2 text-slate-500">
+                  <span className="text-slate-700 shrink-0">›</span>{l}
+                </div>
+              ))}
+              <div ref={ref} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Result card (after job succeeds) ──────────────────────────────────────
+    const FOLDER_LABELS = {
+      downloads: "1 - SeePlaces Downloads",
+      guides:    "2 - Guide Reports",
+      reconcile: "3 - Reconciliation",
+    };
+
+    function ResultCard({ filename, folder, children }) {
+      return (
+        <div className="mt-4 rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 shrink-0">
+              <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span className="text-sm font-semibold text-emerald-300">Your report is ready!</span>
+          </div>
+          {children}
+          <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 mb-1">
+            <p className="text-[10px] text-slate-600 mb-0.5">Saved to</p>
+            <div className="flex items-center gap-2">
+              <svg className="h-3.5 w-3.5 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span className="text-xs text-indigo-400 font-medium">outputs / {FOLDER_LABELS[folder] || folder}</span>
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1 truncate">{filename}</p>
+          </div>
+          <button onClick={() => fetch(`/api/open-output?folder=${folder}`)}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-sm font-semibold text-white hover:bg-emerald-600 transition active:scale-[.99]">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Open folder
+          </button>
+        </div>
+      );
+    }
+
+    function ErrorCard({ msg }) {
+      return (
+        <div className="mt-4 rounded-2xl border border-red-900/50 bg-red-950/20 p-4">
+          <p className="text-sm font-semibold text-red-400 mb-1">Something went wrong</p>
+          <p className="text-xs text-red-300/60 break-words">{msg}</p>
+        </div>
+      );
+    }
+
+    // ── Guide summary boxes ───────────────────────────────────────────────────
+
+    function GuideSummary({ summary }) {
+      if (!summary) return null;
+      return (
+        <div className="grid grid-cols-3 gap-2 mb-1">
+          {["kasha","aneta","joanna"].map(g => {
+            const s = summary[g] || { count: 0, total: 0 };
+            return (
+              <div key={g} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                <span className="inline-block rounded-md px-2 py-0.5 text-[10px] font-bold text-white mb-2"
+                  style={{ background: GUIDE_COLOR[g] }}>{g.toUpperCase()}</span>
+                <p className="text-2xl font-bold text-slate-100 leading-none">{s.count}</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">bookings</p>
+                <p className="text-xs font-medium text-slate-300 mt-1.5">{s.total.toLocaleString("en", { minimumFractionDigits: 2 })} TND</p>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TAB — DOWNLOAD REPORT
+    // ═════════════════════════════════════════════════════════════════════════
+    function DownloadTab({ onDownloaded }) {
+      const today = new Date().toISOString().slice(0, 10);
+      const [email, setEmail]       = useState("transport@btt.tn");
+      const [password, setPassword] = useState("");
+      const [from, setFrom]         = useState(today);
+      const [to, setTo]             = useState(today);
+      const [channel, setChannel]   = useState("all");
+      const [reps, setReps]         = useState({ kasha: false, aneta: false, joanna: false });
+      const [state, setState]       = useState("idle");
+      const [logs, setLogs]         = useState([]);
+      const [result, setResult]     = useState(null);
+      const [err, setErr]           = useState("");
+
+      function go() {
+        if (!email || !password) return alert("Please enter your email and password.");
+        setState("running"); setLogs([]); setResult(null);
+        runJob("/api/download",
+          { email, password, dateFrom: from, dateTo: to, channel,
+            reps: Object.entries(reps).filter(([,v])=>v).map(([k])=>k) },
+          msg => setLogs(p => [...p, msg]),
+          d   => { setState("done"); setResult(d); onDownloaded({ name: d.filename }); },
+          msg => { setState("error"); setErr(msg); }
+        );
+      }
+
+      return (
+        <div>
+          <Card>
+            <SectionTitle>Login credentials</SectionTitle>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Email</Label><input className={inp} value={email} onChange={e=>setEmail(e.target.value)} /></div>
+              <div><Label>Password</Label><input type="password" className={inp} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" /></div>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionTitle>Report filters</SectionTitle>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div><Label>From</Label><input type="date" className={inp} value={from} onChange={e=>setFrom(e.target.value)} /></div>
+              <div><Label>To</Label><input type="date" className={inp} value={to} onChange={e=>setTo(e.target.value)} /></div>
+            </div>
+            <div className="mb-4">
+              <Label>Channel</Label>
+              <select className={`${inp} appearance-none`} value={channel} onChange={e=>setChannel(e.target.value)}>
+                <option value="all">All channels</option>
+                <option value="online">Online only</option>
+                <option value="offline">Offline only</option>
+              </select>
+            </div>
+            <div>
+              <Label>Guides (leave all unchecked = all)</Label>
+              <div className="flex gap-5 mt-1">
+                {["kasha","aneta","joanna"].map(n => (
+                  <label key={n} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" className="sr-only" checked={reps[n]} onChange={e=>setReps(p=>({...p,[n]:e.target.checked}))} />
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition ${reps[n]?"bg-indigo-600 border-indigo-500":"border-slate-600 hover:border-slate-400"}`}>
+                      {reps[n] && <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span className="text-sm capitalize text-slate-300">{n}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <Btn onClick={go} loading={state==="running"} disabled={state==="running"} className="w-full py-3.5">
+            {state==="running" ? "Downloading…" : "Download Report"}
+          </Btn>
+
+          {state==="running" && <ProgressCard logs={logs} />}
+          {state==="done" && result && (
+            <ResultCard filename={result.filename} folder="downloads">
+              <p className="text-xs text-emerald-500 mb-1">
+                This file is now ready to use in the <strong className="text-emerald-400">Guide Report</strong> tab — no need to upload it again.
+              </p>
+            </ResultCard>
+          )}
+          {state==="error" && <ErrorCard msg={err} />}
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TAB — GUIDE REPORT
+    // ═════════════════════════════════════════════════════════════════════════
+    function GuideReportTab({ lastDownload }) {
+      const today = new Date().toISOString().slice(0, 10);
+      const [from, setFrom]       = useState(today);
+      const [to, setTo]           = useState(today);
+      const [state, setState]     = useState("idle");
+      const [logs, setLogs]       = useState([]);
+      const [result, setResult]   = useState(null);
+      const [err, setErr]         = useState("");
+      const [manualOpen, setManualOpen] = useState(false);
+      const [spFile, setSpFile]   = useState(null);
+
+      function go() {
+        setState("running"); setLogs([]); setResult(null); setErr("");
+        runJob("/api/guide-report-full", { dateFrom: from, dateTo: to },
+          msg => setLogs(p => [...p, msg]),
+          d   => { setState("done"); setResult(d); },
+          msg => { setState("error"); setErr(msg); setManualOpen(true); }
+        );
+      }
+
+      function goManual() {
+        if (!spFile?.path) return;
+        setState("running"); setLogs([]); setResult(null); setErr("");
+        runJob("/api/guide-report", { spPath: spFile.path, dateFrom: from, dateTo: to },
+          msg => setLogs(p => [...p, msg]),
+          d   => { setState("done"); setResult(d); },
+          msg => { setState("error"); setErr(msg); }
+        );
+      }
+
+      return (
+        <div>
+          <Card>
+            <SectionTitle>Choose the period</SectionTitle>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>From</Label><input type="date" className={inp} value={from} onChange={e=>setFrom(e.target.value)} /></div>
+              <div><Label>To</Label><input type="date" className={inp} value={to} onChange={e=>setTo(e.target.value)} /></div>
+            </div>
+            <p className="mt-4 text-xs text-slate-600">Logs in automatically, downloads the online report and builds the guide report.</p>
+          </Card>
+
+          <Btn onClick={go} loading={state==="running"} disabled={state==="running"} className="w-full py-3.5">
+            {state==="running" ? "Working…" : "Generate Guide Report"}
+          </Btn>
+
+          {state==="running" && <ProgressCard logs={logs} />}
+          {state==="done" && result && (
+            <ResultCard filename={result.filename} folder="guides">
+              <GuideSummary summary={result.summary} />
+              <CopyWhatsApp summary={result.summary} from={from} to={to} />
+            </ResultCard>
+          )}
+          {state==="error" && <ErrorCard msg={err} />}
+
+          {/* ── Manual fallback ── */}
+          <div className="mt-4">
+            <button
+              onClick={() => setManualOpen(p => !p)}
+              className="flex w-full items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-500 hover:text-slate-300 hover:border-slate-700 transition"
+            >
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span className="flex-1 text-left">Token didn't work? Upload the file manually</span>
+              <svg className={`h-4 w-4 transition-transform ${manualOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            {manualOpen && (
+              <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                <p className="text-xs text-slate-500 mb-3">Download the report manually from SeePlaces, then drop it here.</p>
+                <DropZone file={spFile} onFile={setSpFile} label="Drop your SeePlaces report (.xlsx)" />
+                <Btn
+                  onClick={goManual}
+                  loading={state==="running"}
+                  disabled={state==="running" || !spFile?.path}
+                  className="w-full mt-3"
+                >
+                  Generate from this file
+                </Btn>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // COPY FOR WHATSAPP
+    // ═════════════════════════════════════════════════════════════════════════
+    function CopyWhatsApp({ summary, from: dateFrom, to: dateTo }) {
+      const [copied, setCopied] = useState(false);
+      if (!summary) return null;
+
+      function buildText() {
+        const fmtDate = d => {
+          if (!d) return "—";
+          const [y,m,day] = d.split("-");
+          return `${day}/${m}/${y}`;
+        };
+        const fmtNum = n => Number(n).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const bar = "─────────────────────────────────";
+        let lines = [
+          `📊 *Guide Report — ${fmtDate(dateFrom)} → ${fmtDate(dateTo)}*`,
+          "",
+        ];
+        for (const g of ["kasha","aneta","joanna"]) {
+          const s = summary[g] || { count: 0, total: 0 };
+          lines.push(`👤 *${g.toUpperCase()}:*  ${s.count} booking${s.count !== 1 ? "s" : ""}   ${fmtNum(s.total)} TND`);
+        }
+        const total = ["kasha","aneta","joanna"].reduce((s,g) => s + (summary[g]?.count||0), 0);
+        const rev   = ["kasha","aneta","joanna"].reduce((s,g) => s + (summary[g]?.total||0), 0);
+        lines.push(bar);
+        lines.push(`📦 *TOTAL:*  ${total} bookings   ${fmtNum(rev)} TND`);
+        if (summary.cancelled) lines.push(`❌ Cancelled (not included): ${summary.cancelled}`);
+        return lines.join("\n");
+      }
+
+      async function copy() {
+        try {
+          await navigator.clipboard.writeText(buildText());
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        } catch { alert(buildText()); }
+      }
+
+      return (
+        <button onClick={copy}
+          className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-sm font-semibold text-slate-300 hover:border-slate-500 hover:text-slate-100 transition active:scale-[.98]">
+          {copied
+            ? <><svg className="h-4 w-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copied!</>
+            : <><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy summary for WhatsApp</>
+          }
+        </button>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TAB — RECONCILE
+    // ═════════════════════════════════════════════════════════════════════════
+
+    const GUIDE_COLORS_RC = { kasha: "#4F46E5", aneta: "#0891B2", joanna: "#059669" };
+
+    // One guide pair slot: guide selector + Itaka file + System file
+    function GuidePairSlot({ pair, onChange, onRemove }) {
+      const [itakaUploading, setItakaUploading] = useState(false);
+      const [sysUploading,   setSysUploading]   = useState(false);
+      const itakaRef = useRef(); const sysRef = useRef();
+
+      async function upload(file, setUploading, field) {
+        if (!file) return;
+        setUploading(true);
+        try {
+          const r = await uploadFile(file);
+          onChange({ ...pair, [field]: { name: r.name, path: r.path } });
+        } catch { alert("Upload failed, try again."); }
+        finally { setUploading(false); }
+      }
+
+      const color = GUIDE_COLORS_RC[pair.guide] || "#475569";
+
+      return (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 mb-3">
+          {/* Guide selector */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs text-slate-500 mr-1">Guide:</span>
+            {["kasha","aneta","joanna"].map(g => (
+              <button key={g} onClick={() => onChange({ ...pair, guide: g })}
+                className="rounded-lg px-3 py-1.5 text-xs font-bold transition-all"
+                style={{ background: pair.guide===g ? GUIDE_COLORS_RC[g] : "var(--inactive-bg)",
+                         color: pair.guide===g ? "#fff" : "#64748b" }}>
+                {g.charAt(0).toUpperCase()+g.slice(1)}
+              </button>
+            ))}
+            <button onClick={onRemove} className="ml-auto text-slate-700 hover:text-red-400 transition">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          {/* Two file drops side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Itaka file", field: "itakaFile", uploading: itakaUploading, setUploading: setItakaUploading, ref: itakaRef, color: "#DC2626" },
+              { label: "System file", field: "sysFile",  uploading: sysUploading,   setUploading: setSysUploading,   ref: sysRef,   color: "#2563EB" },
+            ].map(({ label, field, uploading, setUploading, ref, color: fc }) => {
+              const f = pair[field];
+              return (
+                <div key={field}>
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: fc }}>{label}</p>
+                  {f?.path ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2">
+                      <p className="flex-1 truncate text-xs text-slate-300">{f.name}</p>
+                      <button onClick={() => onChange({ ...pair, [field]: null })} className="text-slate-600 hover:text-red-400">
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div onClick={() => ref.current?.click()}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); upload(e.dataTransfer.files[0], setUploading, field); }}
+                      className="cursor-pointer rounded-xl border-2 border-dashed border-slate-700 hover:border-slate-500 px-3 py-4 text-center transition-all">
+                      <input ref={ref} type="file" accept=".xlsx,.xls" className="hidden"
+                        onChange={e => { upload(e.target.files[0], setUploading, field); e.target.value = ""; }} />
+                      {uploading
+                        ? <svg className="animate-spin h-4 w-4 text-indigo-400 mx-auto" viewBox="0 0 24 24" fill="none"><circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                        : <p className="text-xs text-slate-500">Drop or click</p>
+                      }
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function ReconcileTab() {
+      const [pairs,  setPairs]  = useState([{ id: 1, guide: "joanna", itakaFile: null, sysFile: null }]);
+      const [state,  setState]  = useState("idle");
+      const [logs,   setLogs]   = useState([]);
+      const [result, setResult] = useState(null);
+      const [err,    setErr]    = useState("");
+
+      function addPair() {
+        if (pairs.length >= 3) return;
+        const used = pairs.map(p => p.guide);
+        const next = ["kasha","aneta","joanna"].find(g => !used.includes(g)) || "kasha";
+        setPairs(p => [...p, { id: Date.now(), guide: next, itakaFile: null, sysFile: null }]);
+      }
+
+      function updatePair(id, updated) { setPairs(p => p.map(x => x.id === id ? updated : x)); }
+      function removePair(id) { setPairs(p => p.filter(x => x.id !== id)); }
+
+      const ready = pairs.length > 0 && pairs.every(p => p.itakaFile?.path && p.sysFile?.path);
+
+      function go() {
+        if (!ready) return alert("Each guide slot needs both files.");
+        setState("running"); setLogs([]); setResult(null); setErr("");
+        const payload = { pairs: pairs.map(p => ({ guide: p.guide, itakaPath: p.itakaFile.path, sysPath: p.sysFile.path })) };
+        runJob("/api/reconcile", payload,
+          msg => setLogs(p => [...p, msg]),
+          d   => { setState("done"); setResult(d); },
+          msg => { setState("error"); setErr(msg); }
+        );
+      }
+
+      const summary = result?.summary || {};
+
+      return (
+        <div>
+          {pairs.map(pair => (
+            <GuidePairSlot key={pair.id} pair={pair}
+              onChange={updated => updatePair(pair.id, updated)}
+              onRemove={() => removePair(pair.id)} />
+          ))}
+
+          {pairs.length < 3 && (
+            <button onClick={addPair}
+              className="w-full mb-4 rounded-2xl border-2 border-dashed border-slate-800 py-3 text-sm text-slate-600 hover:border-slate-600 hover:text-slate-400 transition">
+              + Add another guide
+            </button>
+          )}
+
+          <Btn onClick={go} loading={state==="running"} disabled={state==="running" || !ready} className="w-full py-3.5">
+            {state==="running" ? "Running…" : "Run Reconciliation"}
+          </Btn>
+
+          {state==="running" && <ProgressCard logs={logs} />}
+
+          {state==="done" && result && (
+            <ResultCard filename={result.filename} folder="reconcile">
+              {pairs.map(p => p.guide).filter(g => summary[g]).map(g => {
+                const s = summary[g]; const color = GUIDE_COLORS_RC[g];
+                const ok = s.mismatch === 0 && s.itaka_only === 0 && s.sys_only === 0;
+                return (
+                  <div key={g} className="mb-3 rounded-xl overflow-hidden border border-slate-700">
+                    <div className="px-3 py-2 flex items-center gap-2" style={{ backgroundColor: color }}>
+                      <span className="text-sm font-bold text-white">{g.toUpperCase()}</span>
+                      <span className="ml-auto text-xs text-white/70">{ok ? "All matched ✓" : "Issues found"}</span>
+                    </div>
+                    <div className="grid grid-cols-4 divide-x divide-slate-700 bg-slate-900/50">
+                      {[
+                        { label: "Matched",     n: s.matched,     ok: true },
+                        { label: "Price diff",  n: s.mismatch,    ok: s.mismatch    === 0 },
+                        { label: "Itaka only",  n: s.itaka_only,  ok: s.itaka_only  === 0 },
+                        { label: "System only", n: s.sys_only,    ok: s.sys_only    === 0 },
+                      ].map(item => (
+                        <div key={item.label} className="px-3 py-2 text-center">
+                          <p className={`text-xl font-bold leading-none ${item.ok ? "text-emerald-400" : "text-red-400"}`}>{item.n}</p>
+                          <p className="text-xs text-slate-500 mt-1">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </ResultCard>
+          )}
+          {state==="error" && <ErrorCard msg={err} />}
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TAB — HOTELS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function GuideToggle({ current, id, onChange }) {
+      return (
+        <div className="flex gap-1 shrink-0">
+          {GUIDES.map(g => {
+            const active = current === g;
+            return (
+              <button key={g} onClick={() => !active && onChange(id, g)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${active ? "text-white" : "text-slate-500 hover:text-white"}`}
+                style={{ background: active ? GUIDE_COLOR[g] : "var(--inactive-bg)", boxShadow: active ? `0 2px 8px ${GUIDE_COLOR[g]}55` : "none" }}
+              >
+                {g[0].toUpperCase() + g.slice(1,3)}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function AddRow({ placeholder, onAdd }) {
+      const [name, setName]   = useState("");
+      const [guide, setGuide] = useState("kasha");
+      function commit() {
+        const n = name.trim(); if (!n) return;
+        onAdd(n, guide); setName("");
+      }
+      return (
+        <div className="mt-4 pt-4 border-t border-slate-800 flex gap-2">
+          <input className={`${inp} flex-1`} placeholder={placeholder} value={name}
+            onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && commit()} />
+          <div className="flex gap-1 shrink-0">
+            {GUIDES.map(g => (
+              <button key={g} onClick={() => setGuide(g)}
+                className="rounded-lg px-2.5 py-2 text-xs font-bold transition-all"
+                style={{ background: guide===g ? GUIDE_COLOR[g] : "var(--inactive-bg)", color: guide===g ? "#fff" : "#64748b" }}>
+                {g[0].toUpperCase() + g.slice(1,3)}
+              </button>
+            ))}
+          </div>
+          <Btn onClick={commit} variant="secondary">+ Add</Btn>
+        </div>
+      );
+    }
+
+    function HotelsTab() {
+      const [email, setEmail]         = useState("");
+      const [password, setPassword]   = useState("");
+      const [credSaved, setCredSaved] = useState(false);
+      const [cfg, setCfg]             = useState(null);
+      const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+      const [search, setSearch]       = useState("");
+      const saveTimer = React.useRef(null);
+
+      useEffect(() => {
+        fetch("/api/settings").then(r=>r.json()).then(s => { setEmail(s.email||""); setPassword(s.password||""); });
+        fetch("/api/assignment-config").then(r=>r.json()).then(c => setCfg(c));
+      }, []);
+
+      async function saveCredentials() {
+        await fetch("/api/settings", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ email, password }) });
+        setCredSaved(true); setTimeout(() => setCredSaved(false), 2500);
+      }
+
+      async function persistConfig(c) {
+        setSaveState("saving");
+        try {
+          const res = await fetch("/api/assignment-config", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(c) });
+          if (!res.ok) throw new Error("Server error");
+          setSaveState("saved");
+          setTimeout(() => setSaveState("idle"), 2000);
+        } catch(e) {
+          setSaveState("error");
+          setTimeout(() => setSaveState("idle"), 3000);
+        }
+      }
+
+      function mutate(fn) {
+        setCfg(prev => {
+          const next = fn(JSON.parse(JSON.stringify(prev)));
+          // Auto-save: debounce 600ms after last change
+          clearTimeout(saveTimer.current);
+          saveTimer.current = setTimeout(() => persistConfig(next), 600);
+          return next;
+        });
+      }
+
+      // Region rules
+      function setRegionGuide(region, guide) { mutate(c => { c.region_guide[region] = guide; return c; }); }
+      function removeRegion(region) { mutate(c => { delete c.region_guide[region]; return c; }); }
+      function addRegion(name, guide) { mutate(c => { c.region_guide[name] = guide; return c; }); }
+
+      // Hotel overrides
+      function setOverrideGuide(hotel, guide) { mutate(c => { c.hotel_overrides[hotel] = guide; return c; }); }
+      function removeOverride(hotel) { mutate(c => { delete c.hotel_overrides[hotel]; return c; }); }
+      function addOverride(hotel, guide) { mutate(c => { c.hotel_overrides[hotel] = guide; return c; }); }
+
+      const regionRows   = cfg ? Object.entries(cfg.region_guide).sort(([a],[b]) => a.localeCompare(b)) : [];
+      const overrideRows = cfg
+        ? Object.entries(cfg.hotel_overrides)
+            .filter(([h]) => !search || h.toLowerCase().includes(search.toLowerCase()))
+            .sort(([a],[b]) => a.localeCompare(b))
+        : [];
+
+      const saveLabel = { idle: "", saving: "Saving…", saved: "✓ Saved!", error: "❌ Save failed" }[saveState];
+      const saveDot   = { idle: "bg-slate-700", saving: "bg-yellow-400 animate-pulse", saved: "bg-emerald-400", error: "bg-red-400" }[saveState];
+
+      return (
+        <div>
+          {/* ── Credentials ── */}
+          <Card>
+            <SectionTitle>SeePlaces credentials</SectionTitle>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div><Label>Email</Label><input className={inp} value={email} onChange={e=>setEmail(e.target.value)} /></div>
+              <div><Label>Password</Label><input type="password" className={inp} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" /></div>
+            </div>
+            <Btn onClick={saveCredentials} variant="secondary" className="w-full">
+              {credSaved ? "✓ Saved!" : "Save credentials"}
+            </Btn>
+          </Card>
+
+          {/* ── Auto-save indicator ── */}
+          {cfg && saveState !== "idle" && (
+            <div className="flex items-center gap-2 px-1 mb-3 -mt-1">
+              <span className={`h-2 w-2 rounded-full ${saveDot}`} />
+              <span className="text-xs text-slate-500">{saveLabel}</span>
+            </div>
+          )}
+
+          {/* ── Region Rules ── */}
+          <Card>
+            <div className="flex items-center justify-between mb-1">
+              <SectionTitle>Region rules</SectionTitle>
+            </div>
+            <p className="text-xs text-slate-600 mb-4 -mt-2">Each region goes entirely to one guide. Hotels not matching any region → Unassigned.</p>
+            <div className="space-y-1.5">
+              {regionRows.map(([region, guide]) => (
+                <div key={region} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ background: GUIDE_COLOR[guide] || "#475569" }} />
+                  <p className="flex-1 text-sm text-slate-200 font-medium">{region}</p>
+                  <GuideToggle current={guide} id={region} onChange={setRegionGuide} />
+                  <button onClick={() => removeRegion(region)}
+                    className="shrink-0 ml-1 p-1 rounded-lg text-slate-700 hover:text-red-400 hover:bg-red-950/30 transition">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <AddRow placeholder="New region name (as in SeePlaces)…" onAdd={addRegion} />
+          </Card>
+
+          {/* ── Hotel Overrides ── */}
+          <Card>
+            <SectionTitle>Hotel exceptions</SectionTitle>
+            <p className="text-xs text-slate-600 mb-4 -mt-2">These hotels ignore their region rule and go directly to the selected guide.</p>
+
+            <div className="mb-3 relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input className={`${inp} pl-9`} placeholder="Search hotels…" value={search} onChange={e=>setSearch(e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-0.5">
+              {overrideRows.length === 0 && cfg && (
+                <p className="text-center text-xs text-slate-700 py-6">{search ? "No hotels match your search" : "No exceptions yet"}</p>
+              )}
+              {overrideRows.map(([hotel, guide]) => (
+                <div key={hotel} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2.5">
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ background: GUIDE_COLOR[guide] || "#475569" }} />
+                  <p className="flex-1 min-w-0 text-sm text-slate-200 truncate" title={hotel}>{hotel}</p>
+                  <GuideToggle current={guide} id={hotel} onChange={setOverrideGuide} />
+                  <button onClick={() => removeOverride(hotel)}
+                    className="shrink-0 ml-1 p-1 rounded-lg text-slate-700 hover:text-red-400 hover:bg-red-950/30 transition">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <AddRow placeholder="Hotel name (exactly as in SeePlaces)…" onAdd={addOverride} />
+          </Card>
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // TAB — ANALYTICS
+    // ═════════════════════════════════════════════════════════════════════════
+    function ChartBox({ title, height = 200, children }) {
+      return (
+        <Card>
+          <SectionTitle>{title}</SectionTitle>
+          <div style={{ position: "relative", height }}>{children}</div>
+        </Card>
+      );
+    }
+
+    function StatCard({ label, value, sub, accent }) {
+      return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4"
+          style={accent ? { borderColor: accent + "40" } : {}}>
+          <p className="text-[10px] font-semibold uppercase tracking-widest mb-1"
+            style={{ color: accent || "#475569" }}>{label}</p>
+          <p className="text-2xl font-bold text-slate-100 leading-none">{value}</p>
+          {sub && <p className="text-xs text-slate-500 mt-1.5">{sub}</p>}
+        </div>
+      );
+    }
+
+    const PRESETS = [
+      { label: "Last 7 days",   days: 7  },
+      { label: "Last 30 days",  days: 30 },
+      { label: "Last 3 months", days: 90 },
+      { label: "Last 6 months", days: 183 },
+    ];
+
+    function offsetDate(days) {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function AnalyticsTab({ isActive }) {
+      const today = new Date().toISOString().slice(0, 10);
+      const [from, setFrom]   = useState(offsetDate(30));
+      const [to,   setTo]     = useState(today);
+      const [channel, setChannel] = useState("all");
+      const [state, setState] = useState("idle");
+      const [logs,  setLogs]  = useState([]);
+      const [data,  setData]  = useState(null);
+      const [err,   setErr]   = useState("");
+
+      const trendRef = useRef(); const donutRef = useRef();
+      const regRef   = useRef(); const hotelRef = useRef();
+      const charts   = useRef({});
+
+      function applyPreset(days) {
+        setFrom(offsetDate(days));
+        setTo(today);
+      }
+
+      function go() {
+        setState("running"); setLogs([]); setData(null); setErr("");
+        runJob("/api/analyze-full", { dateFrom: from, dateTo: to, channel },
+          msg => setLogs(p => [...p, msg]),
+          d   => { setState("done"); setData(d.analytics); },
+          msg => { setState("error"); setErr(msg); }
+        );
+      }
+
+      // Resize when tab becomes visible
+      useEffect(() => {
+        if (isActive) Object.values(charts.current).forEach(c => c?.resize());
+      }, [isActive]);
+
+      // Build charts whenever data arrives
+      useEffect(() => {
+        if (!data) return;
+        if (typeof Chart === "undefined") return;
+        Object.values(charts.current).forEach(c => c?.destroy());
+        charts.current = {};
+
+        const grid = "#1e293b";
+        const tick = "#475569";
+        const leg  = { labels: { color: "#94a3b8", font: { size: 10 }, boxWidth: 10 } };
+
+        // Trend line — bookings per period per guide
+        if (trendRef.current && data.series?.length) {
+          charts.current.trend = new Chart(trendRef.current, {
+            type: "line",
+            data: {
+              labels: data.series.map(s => s.label),
+              datasets: GUIDES.map(g => ({
+                label: g.toUpperCase(),
+                data: data.series.map(s => s[g] || 0),
+                borderColor: GUIDE_COLOR[g],
+                backgroundColor: GUIDE_COLOR[g] + "18",
+                tension: 0.35, fill: true, pointRadius: 3, pointHoverRadius: 5,
+              })),
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: leg },
+              scales: {
+                x: { ticks: { color: tick, font: { size: 10 }, maxRotation: 45 }, grid: { color: grid } },
+                y: { ticks: { color: tick, font: { size: 10 } }, grid: { color: grid }, beginAtZero: true },
+              },
+            },
+          });
+        }
+
+        // Donut — bookings by guide
+        if (donutRef.current) {
+          charts.current.donut = new Chart(donutRef.current, {
+            type: "doughnut",
+            data: {
+              labels: GUIDES.map(g => g.toUpperCase()),
+              datasets: [{ data: GUIDES.map(g => data.guides?.[g]?.count || 0),
+                backgroundColor: GUIDES.map(g => GUIDE_COLOR[g]),
+                borderWidth: 0, hoverOffset: 6 }],
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false, cutout: "66%",
+              plugins: { legend: { position: "bottom", labels: { color: "#94a3b8", font: { size: 10 }, boxWidth: 10 } } },
+            },
+          });
+        }
+
+        // Regions horizontal bar
+        if (regRef.current && data.regions) {
+          const entries = Object.entries(data.regions).sort(([,a],[,b]) => b.count - a.count);
+          charts.current.reg = new Chart(regRef.current, {
+            type: "bar",
+            data: {
+              labels: entries.map(([r]) => r),
+              datasets: [{
+                label: "Bookings",
+                data: entries.map(([,v]) => v.count),
+                backgroundColor: "#6366f1cc", borderColor: "#6366f1",
+                borderWidth: 1, borderRadius: 4,
+              }],
+            },
+            options: {
+              indexAxis: "y", responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: tick, font: { size: 10 } }, grid: { color: grid }, beginAtZero: true },
+                y: { ticks: { color: "#94a3b8", font: { size: 10 } }, grid: { color: grid } },
+              },
+            },
+          });
+        }
+
+        // Top hotels horizontal bar
+        if (hotelRef.current && data.top_hotels?.length) {
+          charts.current.hotel = new Chart(hotelRef.current, {
+            type: "bar",
+            data: {
+              labels: data.top_hotels.map(h => h.hotel.length > 28 ? h.hotel.slice(0, 26) + "…" : h.hotel),
+              datasets: [{
+                label: "Bookings",
+                data: data.top_hotels.map(h => h.count),
+                backgroundColor: data.top_hotels.map(h => (GUIDE_COLOR[h.guide] || "#64748b") + "cc"),
+                borderColor:     data.top_hotels.map(h => GUIDE_COLOR[h.guide] || "#64748b"),
+                borderWidth: 1, borderRadius: 4,
+              }],
+            },
+            options: {
+              indexAxis: "y", responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: tick, font: { size: 10 } }, grid: { color: grid }, beginAtZero: true },
+                y: { ticks: { color: "#94a3b8", font: { size: 10 } }, grid: { color: grid } },
+              },
+            },
+          });
+        }
+
+        return () => { Object.values(charts.current).forEach(c => c?.destroy()); };
+      }, [data]);
+
+      const fmtTND = n => Number(n).toLocaleString("en", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+      return (
+        <div>
+          {/* ── Period picker ── */}
+          <Card>
+            <SectionTitle>Choose a period to analyse</SectionTitle>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {PRESETS.map(p => (
+                <button key={p.label} onClick={() => applyPreset(p.days)}
+                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition">
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div><Label>From</Label><input type="date" className={inp} value={from} onChange={e => setFrom(e.target.value)} /></div>
+              <div><Label>To</Label>  <input type="date" className={inp} value={to}   onChange={e => setTo(e.target.value)}   /></div>
+            </div>
+            <div>
+              <Label>Channel</Label>
+              <div className="flex gap-2">
+                {[{id:"all",label:"All"},{id:"online",label:"Online"},{id:"offline",label:"Offline"}].map(c => (
+                  <button key={c.id} onClick={() => setChannel(c.id)}
+                    className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-all
+                      ${channel === c.id
+                        ? "border-indigo-500 bg-indigo-600/20 text-indigo-300"
+                        : "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500 hover:text-slate-200"}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <Btn onClick={go} loading={state==="running"} disabled={state==="running"} className="w-full py-3.5 mb-4">
+            {state==="running" ? "Analysing…" : "Analyse this period"}
+          </Btn>
+
+          {state==="running" && <ProgressCard logs={logs} />}
+          {state==="error"   && <ErrorCard msg={err} />}
+
+          {data && (<>
+            {/* Channel badge */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className={`rounded-lg px-2.5 py-1 text-xs font-bold uppercase tracking-wide
+                ${data.channel === "online" ? "bg-indigo-600/20 text-indigo-300 border border-indigo-600/40" :
+                  data.channel === "offline" ? "bg-amber-600/20 text-amber-300 border border-amber-600/40" :
+                  "bg-slate-700/50 text-slate-300 border border-slate-600"}`}>
+                {data.channel === "all" ? "All channels" : data.channel === "online" ? "Online only" : "Offline only"}
+              </span>
+              <span className="text-xs text-slate-600">{data.date_from} → {data.date_to}</span>
+            </div>
+
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <StatCard label="Total confirmed bookings" value={data.total}       accent="#6366f1" />
+              <StatCard label="Total revenue"            value={fmtTND(data.grand_total) + " TND"} accent="#6366f1" />
+              <StatCard label="Avg per booking"          value={fmtTND(data.avg_per_booking) + " TND"} />
+              <StatCard label="Cancelled (excluded)"     value={data.cancelled}
+                sub="not counted in totals"
+                accent={data.cancelled > 0 ? "#ef4444" : undefined} />
+            </div>
+
+            {/* Per guide cards */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {GUIDES.map(g => {
+                const s = data.guides?.[g] || { count: 0, total: 0, avg: 0, revenue_pct: 0, booking_pct: 0 };
+                return (
+                  <div key={g} className="rounded-2xl border bg-slate-900/50 p-3 text-center"
+                    style={{ borderColor: GUIDE_COLOR[g] + "50" }}>
+                    <span className="inline-block rounded-md px-2 py-0.5 text-[10px] font-bold text-white mb-2"
+                      style={{ background: GUIDE_COLOR[g] }}>{g.toUpperCase()}</span>
+                    <p className="text-2xl font-bold text-slate-100 leading-none">{s.count}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{s.booking_pct ?? Math.round(s.count/data.total*100)}% of bookings</p>
+                    <p className="text-sm font-semibold mt-2" style={{ color: GUIDE_COLOR[g] }}>{fmtTND(s.total)} TND</p>
+                    <p className="text-[10px] text-slate-500">{s.revenue_pct ?? 0}% of revenue</p>
+                    {s.avg > 0 && <p className="text-[10px] text-slate-600 mt-1">avg {fmtTND(s.avg)} TND</p>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Trend chart */}
+            {data.series?.length > 1 && (
+              <ChartBox title={`Bookings per ${data.bucket_label} — by guide`} height={220}>
+                <canvas ref={trendRef} />
+              </ChartBox>
+            )}
+
+            {/* Guide donut + Region bar */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                <SectionTitle>Bookings by guide</SectionTitle>
+                <div style={{ height: 180, position: "relative" }}>
+                  <canvas ref={donutRef} />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                <SectionTitle>Bookings by region</SectionTitle>
+                <div style={{ height: 180, position: "relative" }}>
+                  <canvas ref={regRef} />
+                </div>
+              </div>
+            </div>
+
+            {/* Top hotels */}
+            {data.top_hotels?.length > 0 && (
+              <ChartBox title="Top hotels by bookings (coloured by guide)" height={data.top_hotels.length * 28 + 20}>
+                <canvas ref={hotelRef} />
+              </ChartBox>
+            )}
+          </>)}
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // WORKLIST TAB  — auto-watch new bookings + generate manifest
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // Two-tone alert sound (no audio file needed).
+    function playAlert() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        const beep = (freq, at, dur) => {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.connect(g); g.connect(ctx.destination);
+          o.type = "sine"; o.frequency.value = freq;
+          const t = ctx.currentTime + at;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          o.start(t); o.stop(t + dur + 0.02);
+        };
+        beep(880, 0, 0.18); beep(1175, 0.20, 0.28);
+      } catch {}
+    }
+
+    function notifyDesktop(title, body) {
+      try {
+        if (!("Notification" in window)) return;
+        if (Notification.permission === "granted") { new Notification(title, { body }); return; }
+        if (Notification.permission !== "denied")
+          Notification.requestPermission().then(p => { if (p === "granted") new Notification(title, { body }); });
+      } catch {}
+    }
+
+    function WorklistTab({ isActive }) {
+      const today = new Date().toISOString().slice(0, 10);
+      const [from, setFrom] = useState(offsetDate(7));      // 7 days back
+      const [to,   setTo]   = useState(offsetDate(-45));    // 45 days ahead
+      const [state, setState]   = useState("idle");         // idle | running
+      const [logs, setLogs]     = useState([]);
+      const [err, setErr]       = useState("");
+      const [wl, setWl]         = useState(null);
+      const [banner, setBanner] = useState(null);           // { new, cancelled }
+      const [auto, setAuto]     = useState(() => localStorage.getItem("sp_wl_auto") !== "0");
+      const [mState, setMState] = useState("idle");         // manifest: idle|running|done|error
+      const [mResult, setMResult] = useState(null);
+      const timerRef = useRef(null);
+      const runningRef = useRef(false);
+
+      const loadWorklist = useCallback(async () => {
+        try {
+          const r = await fetch("/api/worklist");
+          setWl(await r.json());
+        } catch {}
+      }, []);
+
+      useEffect(() => { loadWorklist(); }, [loadWorklist]);
+
+      const doRefresh = useCallback(() => {
+        if (runningRef.current) return;
+        runningRef.current = true;
+        setState("running"); setErr(""); setLogs([]); setBanner(null);
+        runJob("/api/worklist/refresh", { dateFrom: from, dateTo: to },
+          (msg) => setLogs(l => [...l, msg]),
+          (d) => {
+            runningRef.current = false; setState("idle");
+            const n = d.new_count || 0, ca = d.cancelled_count || 0;
+            if (n > 0 || ca > 0) {
+              setBanner({ new: n, cancelled: ca });
+              playAlert();
+              const parts = [];
+              if (n > 0)  parts.push(`${n} new booking${n !== 1 ? "s" : ""}`);
+              if (ca > 0) parts.push(`${ca} cancelled`);
+              notifyDesktop("SeePlaces — Worklist", parts.join(" · "));
+            }
+            loadWorklist();
+          },
+          (msg) => { runningRef.current = false; setState("idle"); setErr(msg); });
+      }, [from, to, loadWorklist]);
+
+      // Auto-refresh every 15 minutes while enabled.
+      useEffect(() => {
+        localStorage.setItem("sp_wl_auto", auto ? "1" : "0");
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (auto) timerRef.current = setInterval(() => doRefresh(), 15 * 60 * 1000);
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+      }, [auto, doRefresh]);
+
+      async function toggleEntered(key, entered) {
+        // optimistic
+        setWl(prev => {
+          if (!prev) return prev;
+          const groups = prev.groups.map(g => ({
+            ...g,
+            lines: g.lines.filter(l => l.key !== key),
+          })).filter(g => g.lines.length > 0);
+          return { ...prev, groups, open_count: Math.max(0, prev.open_count - 1),
+                   done_count: prev.done_count + 1 };
+        });
+        try {
+          await fetch("/api/worklist/entered", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, entered }),
+          });
+        } catch {}
+      }
+
+      async function genManifest() {
+        setMState("running"); setMResult(null);
+        try {
+          const r = await fetch("/api/worklist/manifest", { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: "{}" });
+          const d = await r.json();
+          if (!r.ok || d.error) { setMState("error"); setMResult({ error: d.error || "Failed" }); return; }
+          setMState("done"); setMResult(d);
+        } catch (e) { setMState("error"); setMResult({ error: e.message }); }
+      }
+
+      const fmtSync = (s) => {
+        if (!s) return "never";
+        try { return new Date(s.replace(" ", "T")).toLocaleString(); } catch { return s; }
+      };
+
+      return (
+        <div>
+          <Card>
+            <SectionTitle>Live worklist — new bookings watcher</SectionTitle>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div><Label>Excursion date from</Label>
+                <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} /></div>
+              <div><Label>Excursion date to</Label>
+                <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} /></div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Btn onClick={doRefresh} loading={state === "running"} className="flex-1">
+                {state === "running" ? "Checking…" : "Check now"}
+              </Btn>
+              <button onClick={() => setAuto(a => !a)}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition
+                  ${auto ? "border-emerald-700/50 bg-emerald-950/30 text-emerald-300"
+                          : "border-slate-700 bg-slate-800 text-slate-400"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${auto ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                Auto 15 min {auto ? "on" : "off"}
+              </button>
+            </div>
+
+            <p className="mt-3 text-[11px] text-slate-600">
+              Last check: {fmtSync(wl?.last_sync)}
+            </p>
+
+            {state === "running" && <ProgressCard logs={logs} />}
+            {err && <ErrorCard msg={err} />}
+          </Card>
+
+          {/* New-bookings banner */}
+          {banner && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-600/50 bg-amber-950/30 px-4 py-3">
+              <svg className="h-5 w-5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <p className="flex-1 text-sm font-semibold text-amber-200">
+                {banner.new > 0 && <>{banner.new} new booking{banner.new !== 1 ? "s" : ""}</>}
+                {banner.new > 0 && banner.cancelled > 0 && " · "}
+                {banner.cancelled > 0 && <span className="text-red-300">{banner.cancelled} cancelled</span>}
+                <span className="font-normal text-amber-300/70"> since last check</span>
+              </p>
+              <button onClick={() => setBanner(null)} className="shrink-0 p-1 text-amber-500 hover:text-amber-300">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          )}
+
+          {/* Stats */}
+          {wl && (
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {[
+                { label: "To enter", value: wl.open_count, color: "text-indigo-400" },
+                { label: "New",      value: wl.new_count,  color: "text-amber-400" },
+                { label: "Pax",      value: wl.open_pax,   color: "text-slate-200" },
+                { label: "Done",     value: wl.done_count, color: "text-emerald-400" },
+              ].map((s, i) => (
+                <div key={i} className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5 text-center">
+                  <p className={`text-xl font-bold ${s.color}`}>{s.value ?? 0}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-600">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Manifest generator */}
+          <Card>
+            <SectionTitle>Booked excursions list (manifest)</SectionTitle>
+            <p className="text-xs text-slate-500 mb-3">
+              Build the per-excursion pickup manifest from the latest check — one sheet per excursion, ready to read.
+            </p>
+            <Btn onClick={genManifest} loading={mState === "running"} variant="secondary" className="w-full">
+              Generate manifest Excel
+            </Btn>
+            {mState === "done" && mResult && (
+              <ResultCard filename={mResult.filename} folder="manifests">
+                <p className="text-sm text-slate-300">
+                  {mResult.summary?.sheets} excursion{mResult.summary?.sheets !== 1 ? "s" : ""} ·{" "}
+                  {mResult.summary?.bookings} booking{mResult.summary?.bookings !== 1 ? "s" : ""} ·{" "}
+                  {mResult.summary?.pax} pax
+                </p>
+              </ResultCard>
+            )}
+            {mState === "error" && mResult && <ErrorCard msg={mResult.error} />}
+          </Card>
+
+          {/* Worklist groups */}
+          {wl && wl.groups.length === 0 && (
+            <Card><p className="text-sm text-slate-500 text-center py-4">
+              Nothing to enter. Run a check to pull the latest bookings.
+            </p></Card>
+          )}
+
+          {wl && wl.groups.map((g) => (
+            <div key={g.excursion} className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900/70 px-4 py-2.5">
+                <p className="flex-1 text-sm font-semibold text-slate-200 truncate">{g.excursion}</p>
+                {g.new > 0 && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">{g.new} NEW</span>}
+                {g.cancelled > 0 && <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">{g.cancelled} CANCEL</span>}
+                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400">{g.pax} pax</span>
+              </div>
+              <div className="divide-y divide-slate-800/70">
+                {g.lines.map((l) => {
+                  const cancelled = l.status === "Cancelled";
+                  return (
+                    <label key={l.key}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition
+                        ${cancelled ? "bg-red-950/20 hover:bg-red-950/30" : "hover:bg-slate-800/40"}`}>
+                      <input type="checkbox" checked={false} onChange={() => toggleEntered(l.key, true)}
+                        className="h-4 w-4 shrink-0 rounded border-slate-600 accent-emerald-500 cursor-pointer" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium truncate ${cancelled ? "text-red-300 line-through" : "text-slate-200"}`}>
+                            {l.customer || "(no name)"}
+                          </span>
+                          {l.is_new && <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">NEW</span>}
+                          {cancelled && <span className="shrink-0 rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-300">CANCELLED</span>}
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {l.hotel}{l.excursion_date ? ` · ${l.excursion_date}` : ""}{l.payment ? ` · ${l.payment}` : ""}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs font-semibold text-slate-300">{l.pax} pax</p>
+                        <p className="text-[10px] text-slate-600">{l.booking_number}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {wl && wl.done_count > 0 && (
+            <p className="text-center text-[11px] text-slate-600 mb-2">
+              {wl.done_count} reservation{wl.done_count !== 1 ? "s" : ""} already entered ✓
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // APP ROOT
+    // ═════════════════════════════════════════════════════════════════════════
+    const TABS = [
+      { id: "worklist", label: "Worklist",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> },
+      { id: "download", label: "Download",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> },
+      { id: "guides", label: "Guide Report",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
+      { id: "reconcile", label: "Reconcile",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><line x1="7" y1="12" x2="17" y2="12"/></svg> },
+      { id: "hotels", label: "Hotels",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+      { id: "analytics", label: "Analytics",
+        icon: <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> },
+    ];
+
+    function App() {
+      const [tab, setTab]               = useState("worklist");
+      const [lastDownload, setLastDownload] = useState(() => {
+        try { const s = localStorage.getItem("sp_lastDownload"); return s ? JSON.parse(s) : null; } catch { return null; }
+      });
+      const [dark, setDark] = useState(() => localStorage.getItem("sp_theme") !== "light");
+
+      useEffect(() => {
+        document.documentElement.classList.toggle("light", !dark);
+        localStorage.setItem("sp_theme", dark ? "dark" : "light");
+      }, [dark]);
+
+      const setAndPersistDownload = React.useCallback((val) => {
+        setLastDownload(val);
+        try { if (val) localStorage.setItem("sp_lastDownload", JSON.stringify(val)); else localStorage.removeItem("sp_lastDownload"); } catch {}
+      }, []);
+
+      return (
+        <div className="flex h-screen flex-col bg-slate-950 overflow-hidden">
+          {/* header */}
+          <header className="shrink-0 flex items-center gap-3 border-b border-slate-800/80 bg-slate-900/70 px-5 py-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-xs font-bold text-white shadow-lg shadow-indigo-950">SP</div>
+            <div>
+              <h1 className="text-sm font-semibold leading-none">SeePlaces Tools</h1>
+              <p className="mt-0.5 text-[11px] text-slate-600">Internal reports dashboard</p>
+            </div>
+            {lastDownload && (
+              <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-indigo-800/40 bg-indigo-950/40 px-2.5 py-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse"/>
+                <span className="text-xs text-indigo-400 max-w-[200px] truncate">{lastDownload.name}</span>
+              </div>
+            )}
+          </header>
+
+          {/* tabs */}
+          <div className="shrink-0 border-b border-slate-800/80 bg-slate-900/30 px-5">
+            <div className="flex -mb-px gap-0.5 items-center">
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all
+                    ${tab === t.id ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-300"}`}>
+                  {t.icon}{t.label}
+                </button>
+              ))}
+              <button onClick={() => setDark(d => !d)} title={dark ? "Switch to light mode" : "Switch to dark mode"}
+                className="ml-auto shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-300 transition mb-px">
+                {dark
+                  ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                  : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                }
+              </button>
+            </div>
+          </div>
+
+          {/* content — all tabs stay mounted so state survives tab switches */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-lg px-5 py-6">
+              <div style={{ display: tab === "worklist"  ? "block" : "none" }}><WorklistTab   isActive={tab === "worklist"} /></div>
+              <div style={{ display: tab === "download"  ? "block" : "none" }}><DownloadTab   onDownloaded={setAndPersistDownload} /></div>
+              <div style={{ display: tab === "guides"    ? "block" : "none" }}><GuideReportTab lastDownload={lastDownload} /></div>
+              <div style={{ display: tab === "reconcile" ? "block" : "none" }}><ReconcileTab   lastDownload={lastDownload} /></div>
+              <div style={{ display: tab === "hotels"    ? "block" : "none" }}><HotelsTab /></div>
+              <div style={{ display: tab === "analytics" ? "block" : "none" }}><AnalyticsTab isActive={tab === "analytics"} /></div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+
+  <!-- Compile the app ourselves so we can force the classic JSX runtime (uses the global React, no ES-module imports). -->
+  <script>
+    (function () {
+      try {
+        var src = document.getElementById('app-source').textContent;
+        var out = Babel.transform(src, {
+          presets: [['env', { modules: false }], ['react', { runtime: 'classic' }]]
+        }).code;
+        var s = document.createElement('script');
+        s.textContent = out;
+        document.body.appendChild(s);
+      } catch (err) {
+        __showErr('Compile error', (err && err.message ? err.message : String(err)) + '\n\n' + ((err && err.stack) || ''));
+      }
+    })();
+  </script>
+</body>
+</html>

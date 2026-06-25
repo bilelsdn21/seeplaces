@@ -1,0 +1,16 @@
+# Render Blueprint — deploys the SeePlaces web app as a Docker service.
+# In the Render dashboard: New + → Blueprint → connect this repo.
+services:
+  - type: web
+    name: seeplaces
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      # Set these in the Render dashboard (kept out of the repo on purpose).
+      - key: SEEPLACES_EMAIL
+        sync: false
+      - key: SEEPLACES_PASSWORD
+        sync: false

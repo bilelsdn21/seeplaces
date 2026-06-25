@@ -1,0 +1,16 @@
+{
+  "hotel_overrides": {
+    "Sentido Marillia Resort & Spa": "kasha",
+    "Jaz Tour Khalef": "aneta",
+    "Marhaba Beach": "aneta",
+    "Marhaba Royal Salem": "aneta",
+    "Marhaba Salem": "aneta"
+  },
+  "region_guide": {
+    "Hammamet": "joanna",
+    "Korba": "joanna",
+    "Mahdia": "aneta",
+    "Monastir": "aneta",
+    "Sousse": "kasha"
+  }
+}

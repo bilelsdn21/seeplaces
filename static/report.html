@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SeePlaces Tools — System Report</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink:     #0f172a;
+      --mid:     #334155;
+      --muted:   #64748b;
+      --light:   #f1f5f9;
+      --border:  #e2e8f0;
+      --indigo:  #4f46e5;
+      --cyan:    #0891b2;
+      --emerald: #059669;
+      --amber:   #d97706;
+    }
+    body { font-family: "Inter", sans-serif; color: var(--ink); background: #fff; line-height: 1.6; }
+
+    /* ── Print */
+    @media print {
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+      body { font-size: 12px; }
+    }
+
+    /* ── Layout */
+    .page { max-width: 860px; margin: 0 auto; padding: 48px 40px; }
+
+    /* ── Cover */
+    .cover { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%); color: #fff; border-radius: 16px; padding: 56px 48px; margin-bottom: 48px; position: relative; overflow: hidden; }
+    .cover::before { content: ""; position: absolute; top: -80px; right: -80px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(99,102,241,.35) 0%, transparent 70%); }
+    .cover-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 99px; padding: 6px 14px; font-size: 12px; font-weight: 500; margin-bottom: 24px; }
+    .cover-badge .dot { width: 8px; height: 8px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    .cover h1 { font-size: 40px; font-weight: 800; line-height: 1.1; margin-bottom: 12px; }
+    .cover h1 span { color: #a5b4fc; }
+    .cover p.subtitle { font-size: 16px; color: rgba(255,255,255,.65); max-width: 520px; margin-bottom: 32px; }
+    .cover-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+    .cover-meta-item { }
+    .cover-meta-item .label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.4); }
+    .cover-meta-item .value { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.9); margin-top: 2px; }
+
+    /* ── Section headers */
+    h2 { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    h3 { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+    .section { margin-bottom: 48px; }
+    .section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--indigo); margin-bottom: 6px; }
+    p.lead { font-size: 15px; color: var(--mid); margin-bottom: 16px; }
+    p.body { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
+
+    /* ── Divider */
+    hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* ── Feature grid */
+    .feature-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .feature-card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: box-shadow .2s; }
+    .feature-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+    .feature-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 14px; margin-bottom: 4px; }
+    .feature-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+    /* ── Module table */
+    .module-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .module-table th { text-align: left; padding: 10px 14px; background: var(--light); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--border); }
+    .module-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .module-table tr:last-child td { border-bottom: none; }
+    .module-table td:first-child { font-weight: 600; white-space: nowrap; }
+    .module-table .tag { display: inline-block; border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+    .tag-python  { background: #fef9c3; color: #854d0e; }
+    .tag-react   { background: #e0f2fe; color: #0369a1; }
+    .tag-excel   { background: #dcfce7; color: #166534; }
+    .tag-sqlite  { background: #f3e8ff; color: #6b21a8; }
+    .tag-api     { background: #fee2e2; color: #991b1b; }
+
+    /* ── Tab walkthrough */
+    .tab-list { display: flex; flex-direction: column; gap: 16px; }
+    .tab-item { display: flex; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+    .tab-num { min-width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+    .tab-content { flex: 1; }
+    .tab-content h3 { font-size: 14px; margin-bottom: 4px; }
+    .tab-content p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .tab-content ul { margin-top: 8px; padding-left: 16px; font-size: 13px; color: var(--muted); line-height: 1.8; }
+
+    /* ── Stats row */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+    .stat-box { border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+    .stat-box .num { font-size: 32px; font-weight: 800; color: var(--indigo); line-height: 1; }
+    .stat-box .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+
+    /* ── Process flow */
+    .flow { display: flex; gap: 0; align-items: center; flex-wrap: wrap; margin: 24px 0; }
+    .flow-step { background: var(--light); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+    .flow-arrow { font-size: 18px; color: var(--muted); margin: 0 8px; }
+
+    /* ── Tech stack */
+    .stack-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stack-item { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .stack-item .name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .stack-item .desc { font-size: 12px; color: var(--muted); }
+
+    /* ── Footer */
+    .footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+    .footer .logo { font-weight: 700; color: var(--ink); }
+
+    /* ── Print button */
+    .print-btn { position: fixed; bottom: 24px; right: 24px; background: var(--indigo); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(79,70,229,.4); font-family: inherit; }
+    .print-btn:hover { background: #4338ca; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── COVER ──────────────────────────────────────────────────────────── -->
+  <div class="cover">
+    <div class="cover-badge">
+      <span class="dot"></span>
+      Internal Operations Tool — v2.0
+    </div>
+    <h1>SeePlaces <span>Tools</span></h1>
+    <p class="subtitle">
+      An automated reporting and reconciliation platform for managing guide assignments,
+      weekly booking reports, and financial reconciliation — built for BTT Tunisia.
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="label">Organisation</div>
+        <div class="value">BTT Tunisia</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Platform</div>
+        <div class="value">Desktop App (Windows)</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Data source</div>
+        <div class="value">SeePlaces booking platform</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Report date</div>
+        <div class="value" id="rdate"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── EXECUTIVE SUMMARY ──────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <h2>What this tool does</h2>
+    <p class="lead">
+      SeePlaces Tools replaces a manual weekly process — previously requiring an operator to log into the
+      SeePlaces portal, download a report, manually split bookings by guide, calculate totals in Excel,
+      and distribute results — with a single-click automated workflow.
+    </p>
+    <p class="body">
+      The application connects directly to the SeePlaces API, downloads the booking report for any date range,
+      automatically assigns each booking to the correct guide based on the hotel name, generates a professionally
+      formatted Excel report (split by guide, by region, and with a summary sheet), and provides a live analytics
+      dashboard tracking performance over time.
+    </p>
+    <p class="body">
+      A second module handles financial reconciliation: comparing the SeePlaces confirmed bookings against the
+      internal system records to detect missing entries, extra entries, and price discrepancies — with a
+      colour-coded Excel output highlighting every issue.
+    </p>
+  </div>
+
+  <!-- ── KEY NUMBERS ────────────────────────────────────────────────────── -->
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="num">3</div>
+      <div class="lbl">Guides tracked</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">26</div>
+      <div class="lbl">Hotels mapped</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">5</div>
+      <div class="lbl">Regions covered</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">1-click</div>
+      <div class="lbl">Full automation</div>
+    </div>
+  </div>
+
+  <!-- ── FEATURES ───────────────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Features</div>
+    <h2>Core capabilities</h2>
+    <br/>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#eef2ff;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <h3>Automated report download</h3>
+        <p>Logs into SeePlaces automatically using saved credentials, downloads the booking report for any date range, no manual browser interaction needed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#ecfdf5;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Intelligent guide assignment</h3>
+        <p>Each hotel is mapped to a guide (Kasha, Aneta, or Joanna). The mapping is editable from the UI at any time — no code changes required.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#fff7ed;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        </div>
+        <h3>Multi-sheet Excel output</h3>
+        <p>The generated report has three sheets: a Summary KPI overview, the full Guide Report (coloured by guide with totals), and a By Region breakdown.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#fef2f2;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </div>
+        <h3>Financial reconciliation</h3>
+        <p>Compares SeePlaces confirmed bookings with the internal system by booking ID + voucher number. Detects missing entries, extra entries, and price mismatches.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#f0fdf4;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <h3>Analytics dashboard</h3>
+        <p>Tracks every guide report run in a local database. Shows trend charts (bookings and revenue per guide), week-over-week deltas, and regional breakdowns.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:#ecfeff;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </div>
+        <h3>WhatsApp-ready summary</h3>
+        <p>One-click copy button generates a formatted summary text (bookings + revenue per guide, totals) ready to paste directly into a WhatsApp group.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- ── WORKFLOW ────────────────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Workflow</div>
+    <h2>Guide report — automated pipeline</h2>
+    <p class="body">Once credentials are saved (one time only), generating a weekly report is a 3-step interaction:</p>
+    <div class="flow">
+      <div class="flow-step">1. Select date range</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">2. Click "Generate"</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">3. Download Excel</div>
+    </div>
+    <p class="body">Behind the scenes the system automatically: logs in to SeePlaces, downloads the online booking report, filters confirmed bookings, assigns each to a guide by hotel name, computes totals, builds a 3-sheet Excel workbook, saves the run to the analytics history, and returns a download link — all within the same interface.</p>
+
+    <br/>
+    <h3>Reconciliation workflow</h3>
+    <div class="flow">
+      <div class="flow-step">Drop SeePlaces file</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">Drop system file</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">Run reconciliation</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">Download report</div>
+    </div>
+  </div>
+
+  <hr class="page-break"/>
+
+  <!-- ── APPLICATION TABS ───────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">User Interface</div>
+    <h2>Application tabs</h2>
+    <br/>
+    <div class="tab-list">
+      <div class="tab-item">
+        <div class="tab-num" style="background:#4f46e5;">1</div>
+        <div class="tab-content">
+          <h3>Download Report</h3>
+          <p>Full manual control over the download. Enter credentials, select date range, sales channel (all/online/offline), and optionally filter by specific guide. The downloaded file is automatically made available in the Guide Report and Reconcile tabs without needing to re-upload it.</p>
+        </div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-num" style="background:#059669;">2</div>
+        <div class="tab-content">
+          <h3>Guide Report</h3>
+          <p>The primary weekly workflow tab. Just select the excursion date range — the system handles everything else. Shows a live progress feed while running, then displays a summary card (bookings + revenue per guide) and a download button for the Excel file.</p>
+          <ul>
+            <li>Colour-coded guide banners (Kasha = indigo, Aneta = cyan, Joanna = green)</li>
+            <li>Booking rows with alternating backgrounds</li>
+            <li>Yellow highlighted total row per guide</li>
+            <li>By Region sheet: groups bookings by Hammamet, Nabeul, Sousse, Port El Kantaoui, Mahdia, Monastir</li>
+            <li>Summary sheet: KPI overview with guide and region breakdown</li>
+            <li>One-click copy of WhatsApp-formatted summary text</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-num" style="background:#dc2626;">3</div>
+        <div class="tab-content">
+          <h3>Reconcile</h3>
+          <p>Drag-and-drop two files — the SeePlaces report and the internal system report — to run a full reconciliation. The output Excel has four sheets: a colour-coded Summary, Missing in System (red), Extra in System (orange), and Price Mismatches (yellow).</p>
+          <ul>
+            <li>Matching key: Booking ID + Voucher Number</li>
+            <li>Price comparison rounded to 2 decimal places</li>
+            <li>Summary stats shown immediately after completion</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-num" style="background:#0891b2;">4</div>
+        <div class="tab-content">
+          <h3>Hotels</h3>
+          <p>Management interface for both login credentials and the hotel-to-guide mapping. Credentials are saved locally and used automatically in the Guide Report tab. The hotel mapping table supports inline guide reassignment (click the coloured pill buttons to switch a hotel between guides), hotel search, adding new hotels, and removing hotels.</p>
+          <ul>
+            <li>Changes take effect immediately for future reports (no restart needed)</li>
+            <li>Per-guide hotel count shown in the header</li>
+            <li>Mapping persisted to hotel_mapping.json on disk</li>
+          </ul>
+        </div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-num" style="background:#7c3aed;">5</div>
+        <div class="tab-content">
+          <h3>Analytics</h3>
+          <p>Historical dashboard powered by a local SQLite database. Every guide report run is automatically saved. The dashboard shows:</p>
+          <ul>
+            <li>KPI cards: total runs, total bookings tracked, last run count and revenue</li>
+            <li>Per-guide comparison vs previous run (▲/▼ delta indicators)</li>
+            <li>Line chart: bookings per guide trend over all runs</li>
+            <li>Stacked bar chart: revenue per guide trend over all runs</li>
+            <li>Doughnut chart: booking distribution by guide (last run)</li>
+            <li>Horizontal bar chart: bookings by region (last run)</li>
+            <li>Cancelled booking count alert</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- ── EXCEL OUTPUT ───────────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Output Files</div>
+    <h2>Excel report structure</h2>
+    <br/>
+    <table class="module-table">
+      <thead>
+        <tr><th>Sheet</th><th>Contents</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Summary <span class="tag tag-excel">first</span></td>
+          <td>Date period, per-guide count + revenue, per-region count + revenue, cancelled count</td>
+          <td>Quick management overview, print-friendly</td>
+        </tr>
+        <tr>
+          <td>Guide Report</td>
+          <td>Three coloured guide sections (Kasha / Aneta / Joanna), each with booking rows (ID, Hotel, Room, Price) and a highlighted total row</td>
+          <td>Primary distribution sheet for guides and management</td>
+        </tr>
+        <tr>
+          <td>By Region</td>
+          <td>Hotels grouped by geographic region (Hammamet, Nabeul, Sousse, Port El Kantaoui, Mahdia, Monastir), with per-hotel subtotals</td>
+          <td>Regional performance analysis</td>
+        </tr>
+      </tbody>
+    </table>
+    <br/>
+    <h3>Reconciliation report structure</h3>
+    <br/>
+    <table class="module-table">
+      <thead>
+        <tr><th>Sheet</th><th>Colour</th><th>Contents</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Summary</td><td>—</td><td>Count of each issue category</td></tr>
+        <tr><td>Missing in System</td><td style="color:#dc2626;">● Red</td><td>Bookings confirmed in SeePlaces but absent from internal system</td></tr>
+        <tr><td>Extra in System</td><td style="color:#d97706;">● Orange</td><td>Entries present in system but not found in SeePlaces</td></tr>
+        <tr><td>Price Mismatches</td><td style="color:#ca8a04;">● Yellow</td><td>Bookings found in both but with differing prices, with difference column</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr/>
+
+  <!-- ── TECHNICAL STACK ─────────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Technical Architecture</div>
+    <h2>Technology stack</h2>
+    <br/>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="name">Python 3.11+</div>
+        <div class="desc">Core backend language — data processing, Excel generation, API calls</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">Flask</div>
+        <div class="desc">Lightweight HTTP server — serves the UI and exposes REST API endpoints</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">pywebview</div>
+        <div class="desc">Wraps the web UI in a native desktop window — no browser required</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">React 18</div>
+        <div class="desc">Frontend UI — single-page app with live state, loaded via CDN (no build step)</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">Chart.js 4</div>
+        <div class="desc">Interactive analytics charts — line, bar, stacked bar, doughnut</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">Tailwind CSS</div>
+        <div class="desc">Utility-first styling for the UI — loaded via CDN</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">pandas + openpyxl</div>
+        <div class="desc">Excel parsing and generation with full cell-level styling control</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">SQLite</div>
+        <div class="desc">Local embedded database for analytics history (history.db)</div>
+      </div>
+      <div class="stack-item">
+        <div class="name">Selenium</div>
+        <div class="desc">Browser automation to authenticate and extract the SeePlaces API token</div>
+      </div>
+    </div>
+
+    <br/><br/>
+    <h3>Application files</h3>
+    <br/>
+    <table class="module-table">
+      <thead><tr><th>File</th><th>Type</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>app.py</td><td><span class="tag tag-python">Python</span></td><td>Flask server, all API endpoints, SSE streaming, pywebview launcher</td></tr>
+        <tr><td>guide_report.py</td><td><span class="tag tag-python">Python</span></td><td>Hotel→guide assignment logic, regional detection, Excel generation</td></tr>
+        <tr><td>reconcile.py</td><td><span class="tag tag-python">Python</span></td><td>SeePlaces vs system reconciliation, colour-coded Excel output</td></tr>
+        <tr><td>history.py</td><td><span class="tag tag-sqlite">SQLite</span></td><td>Persistent storage of all guide report runs for analytics</td></tr>
+        <tr><td>seeplaces_downloader.py</td><td><span class="tag tag-api">API</span></td><td>Selenium login + SeePlaces HTTP API token extraction and download</td></tr>
+        <tr><td>static/index.html</td><td><span class="tag tag-react">React</span></td><td>Complete single-page application — all UI tabs and components</td></tr>
+        <tr><td>hotel_mapping.json</td><td><span class="tag tag-sqlite">Config</span></td><td>Hotel→guide mapping, editable from the Hotels tab UI</td></tr>
+        <tr><td>settings.json</td><td><span class="tag tag-sqlite">Config</span></td><td>Saved email and password credentials</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr/>
+
+  <!-- ── DATA SECURITY ───────────────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Security &amp; Privacy</div>
+    <h2>Data handling</h2>
+    <p class="body">All data remains on the local machine. There are no external cloud services, no data uploads to third-party servers, and no analytics tracking. The application operates entirely offline except for the authenticated connection to the SeePlaces API for downloading reports.</p>
+    <ul style="font-size:14px; color:var(--muted); padding-left:20px; line-height:2;">
+      <li>Credentials stored in <code>settings.json</code> on the local disk only</li>
+      <li>Hotel mapping in <code>hotel_mapping.json</code> on the local disk only</li>
+      <li>Analytics history in <code>history.db</code> SQLite file on the local disk only</li>
+      <li>Downloaded reports saved to <code>uploads/</code> and <code>outputs/</code> folders</li>
+      <li>Flask server listens only on <code>localhost:5174</code> — not accessible from the network</li>
+    </ul>
+  </div>
+
+  <!-- ── FOOTER ──────────────────────────────────────────────────────────── -->
+  <div class="footer">
+    <div>
+      <div class="logo">SeePlaces Tools</div>
+      <div style="margin-top:2px;">Internal Operations Platform — BTT Tunisia</div>
+    </div>
+    <div style="text-align:right;">
+      Confidential<br/>
+      Generated <span id="fdate"></span>
+    </div>
+  </div>
+
+</div>
+
+<button class="print-btn no-print" onclick="window.print()">
+  🖨 Print / Save PDF
+</button>
+
+<script>
+  const d = new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" });
+  document.getElementById("rdate").textContent = d;
+  document.getElementById("fdate").textContent = d;
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+uploads/
+outputs/
+*.db
+*.xlsx
+*.xlsm
+*.XLSX
+settings.json
+.claude/
+.vscode/
+README.md
