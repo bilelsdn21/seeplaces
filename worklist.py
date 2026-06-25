@@ -277,6 +277,8 @@ def get_worklist() -> dict:
                            if l["status"] != "Cancelled"),
         "done_count":  done_count,
         "last_sync":   _meta_get("last_sync", ""),
+        "last_error":  _meta_get("last_error", ""),
+        "last_status": _meta_get("last_status", ""),
     }
 
 

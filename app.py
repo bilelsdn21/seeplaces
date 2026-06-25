@@ -391,13 +391,15 @@ def api_worklist_refresh():
 def _run_worklist_refresh(job_id, data):
     q = _jobs.get(job_id)
     if not q: return
+    import worklist
     with _io_lock:
         old, sys.stdout = sys.stdout, _QueueStream(q)
         sys.stderr = sys.stdout
         try:
+            worklist._meta_set("last_status", "running")
             settings = _load_settings()
             if not settings.get("password"):
-                raise RuntimeError("No password saved. Save your credentials in the Hotels tab first.")
+                raise RuntimeError("No SEEPLACES_PASSWORD set on the server.")
 
             import seeplaces_downloader as dl
             dl.EMAIL         = settings["email"]
@@ -415,10 +417,11 @@ def _run_worklist_refresh(job_id, data):
                 f.write(content)
 
             q.put({"type": "step", "msg": "Checking for new bookings…"})
-            import worklist
             lines  = worklist.parse_lines(report_path)
             result = worklist.sync(lines)
             worklist._meta_set("last_report_path", report_path)
+            worklist._meta_set("last_error", "")
+            worklist._meta_set("last_status", "ok")
 
             q.put({
                 "type": "done",
@@ -427,6 +430,11 @@ def _run_worklist_refresh(job_id, data):
                 "msg": f"✅  {result['new_count']} new · {result['cancelled_count']} cancelled",
             })
         except Exception as e:
+            try:
+                worklist._meta_set("last_error", f"{type(e).__name__}: {e}")
+                worklist._meta_set("last_status", "error")
+            except Exception:
+                pass
             q.put({"type": "error", "msg": f"❌  {e}"})
         finally:
             sys.stdout = sys.stderr = old

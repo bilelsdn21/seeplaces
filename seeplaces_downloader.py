@@ -57,6 +57,13 @@ def get_token_via_browser() -> str:
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
     options.add_argument("--log-level=3")
+    # Keep memory low enough for small hosted instances (e.g. Render 512 MB).
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
     # Capture network traffic so we can read the Bearer token off a real API call.
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
