@@ -86,6 +86,19 @@ def index():
 def healthz():
     return {"ok": True}
 
+@app.route("/api/diag")
+def api_diag():
+    """Non-sensitive credential check: shows the configured email and the
+    password *length* only (never the password), to verify env vars are set
+    correctly on the host."""
+    s = _load_settings()
+    return {
+        "email":            s.get("email", ""),
+        "password_len":     len(s.get("password", "") or ""),
+        "env_email_set":    bool(os.environ.get("SEEPLACES_EMAIL")),
+        "env_password_set": bool(os.environ.get("SEEPLACES_PASSWORD")),
+    }
+
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 
