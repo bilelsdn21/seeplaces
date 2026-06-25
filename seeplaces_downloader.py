@@ -136,6 +136,19 @@ def get_token_via_browser() -> str:
         else:
             raise RuntimeError("Could not extract token from browser.")
 
+    except Exception as e:
+        # Capture what the browser actually saw — distinguishes a slow page from
+        # a Cloudflare/bot block (common when running from a datacenter IP).
+        info = ""
+        try:
+            body = driver.find_element(By.TAG_NAME, "body").text[:300].replace("\n", " ")
+            info = (f" | url={driver.current_url} | title={driver.title!r}"
+                    f" | inputs={len(driver.find_elements(By.TAG_NAME,'input'))}"
+                    f" | body={body!r}")
+        except Exception:
+            pass
+        raise RuntimeError(f"Login failed ({type(e).__name__}){info}")
+
     finally:
         driver.quit()
 
