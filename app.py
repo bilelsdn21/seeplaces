@@ -379,6 +379,19 @@ def api_worklist_get():
     import worklist
     return worklist.get_worklist()
 
+@app.route("/api/worklist/day", methods=["GET"])
+def api_worklist_day():
+    import worklist
+    from datetime import datetime as _dt
+    date = request.args.get("date") or _dt.now().strftime("%Y-%m-%d")
+    return worklist.get_day(date)
+
+@app.route("/api/worklist/ticket", methods=["POST"])
+def api_worklist_ticket():
+    import worklist
+    data = request.json or {}
+    return worklist.set_ticket(data["key"], data.get("ticket", ""))
+
 @app.route("/api/worklist/entered", methods=["POST"])
 def api_worklist_entered():
     import worklist

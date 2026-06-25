@@ -55,6 +55,7 @@ def _init():
                 phone          TEXT,
                 seller         TEXT,
                 notes          TEXT,
+                ticket         TEXT,
                 first_seen     TEXT,
                 last_seen      TEXT,
                 is_new         INTEGER DEFAULT 0,
@@ -66,7 +67,7 @@ def _init():
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
         # Migration: add columns introduced after a DB was first created.
         existing = {r["name"] for r in c.execute("PRAGMA table_info(lines)")}
-        for col in ("pickup_point", "room", "pickup_time", "phone", "seller", "notes"):
+        for col in ("pickup_point", "room", "pickup_time", "phone", "seller", "notes", "ticket"):
             if col not in existing:
                 c.execute(f"ALTER TABLE lines ADD COLUMN {col} TEXT")
 
@@ -254,6 +255,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     d["is_new"]         = bool(d.get("is_new"))
     d["status_changed"] = bool(d.get("status_changed"))
     d["entered"]        = bool(d.get("entered"))
+    d["ticket"]         = d.get("ticket") or ""
     return d
 
 
@@ -306,6 +308,61 @@ def get_worklist() -> dict:
         "last_error":  _meta_get("last_error", ""),
         "last_status": _meta_get("last_status", ""),
     }
+
+
+def get_day(date_str: str) -> dict:
+    """All reservations whose excursion is on `date_str` (YYYY-MM-DD), grouped
+    into one box per excursion type. Includes already-ticketed ones."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM lines WHERE substr(excursion_date,1,10)=? "
+            "ORDER BY excursion, pickup_time, customer", (date_str,)
+        ).fetchall()
+
+    lines = [_row_to_dict(r) for r in rows]
+
+    groups, order = {}, []
+    for ln in lines:
+        g = ln["excursion"]
+        if g not in groups:
+            groups[g] = {"excursion": g, "lines": [], "pax": 0,
+                         "pending": 0, "new": 0, "cancelled": 0}
+            order.append(g)
+        grp = groups[g]
+        grp["lines"].append(ln)
+        cancelled = ln["status"] == "Cancelled"
+        if cancelled:
+            grp["cancelled"] += 1
+        else:
+            grp["pax"] += ln["pax"] or 0
+            if not ln["ticket"]:
+                grp["pending"] += 1          # reservation still needs a ticket
+        if ln["is_new"]:
+            grp["new"] += 1
+
+    grouped = [groups[g] for g in order]
+    # Boxes needing attention (pending / new) float to the top.
+    grouped.sort(key=lambda x: (-(x["pending"] > 0), -x["new"], x["excursion"]))
+
+    return {
+        "date":          date_str,
+        "groups":        grouped,
+        "total_res":     len([l for l in lines if l["status"] != "Cancelled"]),
+        "total_pax":     sum(l["pax"] or 0 for l in lines if l["status"] != "Cancelled"),
+        "pending_total": sum(g["pending"] for g in grouped),
+        "last_sync":     _meta_get("last_sync", ""),
+        "last_error":    _meta_get("last_error", ""),
+    }
+
+
+def set_ticket(key: str, ticket: str) -> dict:
+    ticket = (ticket or "").strip()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if ticket else None
+    with _conn() as c:
+        c.execute(
+            "UPDATE lines SET ticket=?, entered=?, entered_at=?, is_new=0 WHERE key=?",
+            (ticket, 1 if ticket else 0, now, key))
+    return {"ok": True, "ticket": ticket}
 
 
 def set_entered(key: str, entered: bool) -> dict:
