@@ -12,6 +12,11 @@ import requests
 import os
 import time
 import json
+import re
+import base64
+import hashlib
+import secrets
+import urllib.parse
 from datetime import datetime
 
 from selenium import webdriver
@@ -30,6 +35,13 @@ OUTPUT_FOLDER = r"C:\Reports\SeePlaces"
 LOGIN_URL  = "https://admin.seeplaces.com"
 REPORT_URL = "https://admin.seeplaces.com/api/report/getsupplierreport"
 
+# Keycloak SSO (used by the fast HTTP login)
+SSO_BASE     = "https://sso.seeplaces.com/realms/master"
+OIDC_CLIENT  = "panelfront"
+REDIRECT_URI = "https://admin.seeplaces.com/"
+USER_AGENT   = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
 # Sales channel -> saleScopeId UUID
 SALES_CHANNELS = {
     "all":     None,
@@ -44,6 +56,72 @@ REPS = {
     "joanna": "joanna.kisiel@rep.itaka.pl",
 }
 # ─────────────────────────────────────────────
+
+
+def get_token() -> str:
+    """Return an access token, preferring the fast HTTP login over the browser."""
+    try:
+        print("Logging in (fast)...")
+        token = get_token_via_http()
+        print("Token obtained.")
+        return token
+    except Exception as e:
+        print(f"Fast login unavailable ({e}); falling back to browser login...")
+        return get_token_via_browser()
+
+
+def get_token_via_http() -> str:
+    """
+    Perform the Keycloak OIDC authorization-code + PKCE login over plain HTTP —
+    no browser, so it takes ~1s instead of ~30s.
+    """
+    s = requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"})
+
+    verifier  = base64.urlsafe_b64encode(os.urandom(40)).rstrip(b"=").decode()
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+
+    auth_params = {
+        "client_id":             OIDC_CLIENT,
+        "redirect_uri":          REDIRECT_URI,
+        "state":                 secrets.token_urlsafe(16),
+        "response_mode":         "fragment",
+        "response_type":         "code",
+        "scope":                 "openid",
+        "nonce":                 secrets.token_urlsafe(16),
+        "code_challenge":        challenge,
+        "code_challenge_method": "S256",
+    }
+    r = s.get(f"{SSO_BASE}/protocol/openid-connect/auth", params=auth_params, timeout=20)
+    r.raise_for_status()
+
+    # The login POST URL is embedded in the page's JSON model as "loginAction".
+    m = re.search(r'"loginAction":\s*"([^"]+)"', r.text)
+    if not m:
+        raise RuntimeError("Keycloak login form not found (login page changed?)")
+    action = m.group(1).encode().decode("unicode_escape")
+
+    r2 = s.post(action, allow_redirects=False, timeout=20,
+                data={"username": EMAIL, "password": PASSWORD, "credentialId": ""})
+    loc = r2.headers.get("Location", "")
+    if "code=" not in loc:
+        raise RuntimeError("Login rejected — check the SeePlaces email/password.")
+
+    parsed = urllib.parse.urlparse(loc)
+    code = urllib.parse.parse_qs(parsed.fragment or parsed.query).get("code", [None])[0]
+    if not code:
+        raise RuntimeError("No authorization code returned by SeePlaces.")
+
+    tok = s.post(f"{SSO_BASE}/protocol/openid-connect/token", timeout=20,
+                 data={"grant_type": "authorization_code", "code": code,
+                       "redirect_uri": REDIRECT_URI, "client_id": OIDC_CLIENT,
+                       "code_verifier": verifier})
+    tok.raise_for_status()
+    access = tok.json().get("access_token")
+    if not access:
+        raise RuntimeError("No access_token in token response.")
+    return access
 
 
 def get_token_via_browser() -> str:
@@ -269,7 +347,7 @@ def main():
     date_from, date_to, sales_channel, representatives, rep_names = prompt_inputs()
 
     try:
-        token = get_token_via_browser()
+        token = get_token()
     except Exception as e:
         print(f"Auto-login failed: {e}")
         print("Falling back to manual token.")

@@ -192,7 +192,7 @@ def _run_download(job_id, data):
             dl.PASSWORD      = data["password"]
             dl.OUTPUT_FOLDER = DIR_DOWNLOADS
             rep_names = data.get("reps", [])
-            token   = dl.get_token_via_browser()
+            token   = dl.get_token()
             content = dl.download_report(token, data["dateFrom"], data["dateTo"],
                                           data["channel"],
                                           [REPS_MAP[n] for n in rep_names if n in REPS_MAP])
@@ -261,7 +261,7 @@ def _run_guide_report_full(job_id, data):
             dl.OUTPUT_FOLDER = UPLOAD_DIR
 
             q.put({"type": "step", "msg": "Logging in to SeePlaces…"})
-            token = dl.get_token_via_browser()
+            token = dl.get_token()
 
             q.put({"type": "step", "msg": "Downloading online report…"})
             content = dl.download_report(token, data["dateFrom"], data["dateTo"], "online", [])
@@ -310,7 +310,7 @@ def _run_analyze_full(job_id, data):
             dl.OUTPUT_FOLDER = UPLOAD_DIR
 
             q.put({"type": "step", "msg": "Logging in to SeePlaces…"})
-            token = dl.get_token_via_browser()
+            token = dl.get_token()
 
             channel = data.get("channel", "all")
             q.put({"type": "step", "msg": f"Downloading {channel} report…"})
@@ -405,7 +405,7 @@ def _run_worklist_refresh(job_id, data):
             dl.OUTPUT_FOLDER = UPLOAD_DIR
 
             q.put({"type": "step", "msg": "Logging in to SeePlaces…"})
-            token = dl.get_token_via_browser()
+            token = dl.get_token()
 
             q.put({"type": "step", "msg": "Downloading latest bookings…"})
             content = dl.download_report(token, data["dateFrom"], data["dateTo"], "all", [])
