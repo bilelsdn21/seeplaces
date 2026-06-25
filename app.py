@@ -60,6 +60,10 @@ def _load_settings():
     # is a common cause of "invalid username or password".
     env_email = (os.environ.get("SEEPLACES_EMAIL") or "").strip()
     env_pw    = (os.environ.get("SEEPLACES_PASSWORD") or "").strip()
+    # If the email value is clearly not an address (e.g. the env var was set to
+    # the key name by mistake), fall back to the known account email.
+    if env_email and "@" not in env_email:
+        env_email = "transport@btt.tn"
     if env_email and env_pw:
         return {"email": env_email, "password": env_pw}
     # Local fallback: settings.json (gitignored) if present.
