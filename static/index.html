@@ -1227,7 +1227,6 @@
       const [from] = useState(offsetDate(1));      // yesterday
       const [to]   = useState(offsetDate(-60));     // 60 days ahead
       const [state, setState]   = useState("idle"); // idle | running
-      const [logs, setLogs]     = useState([]);
       const [err, setErr]       = useState("");
       const [wl, setWl]         = useState(null);
       const [banner, setBanner] = useState(null);    // { new, cancelled }
@@ -1245,27 +1244,33 @@
 
       useEffect(() => { loadWorklist(); }, [loadWorklist]);
 
-      const doRefresh = useCallback(() => {
+      const doRefresh = useCallback(async () => {
         if (runningRef.current) return;
         runningRef.current = true;
         nextAtRef.current = Date.now() + intervalMs;
-        setState("running"); setErr(""); setLogs([]); setBanner(null);
-        runJob("/api/worklist/refresh", { dateFrom: from, dateTo: to },
-          (msg) => setLogs(l => [...l, msg]),
-          (d) => {
-            runningRef.current = false; setState("idle");
-            const n = d.new_count || 0, ca = d.cancelled_count || 0;
-            if (n > 0 || ca > 0) {
-              setBanner({ new: n, cancelled: ca });
-              playAlert();
-              const parts = [];
-              if (n > 0)  parts.push(`${n} new booking${n !== 1 ? "s" : ""}`);
-              if (ca > 0) parts.push(`${ca} cancelled`);
-              notifyDesktop("SeePlaces — new activity", parts.join(" · "));
-            }
-            loadWorklist();
-          },
-          (msg) => { runningRef.current = false; setState("idle"); setErr(msg); });
+        setState("running"); setErr(""); setBanner(null);
+        try {
+          const r = await fetch("/api/worklist/refresh", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dateFrom: from, dateTo: to }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok || d.error) throw new Error(d.error || `Server error ${r.status}`);
+          const n = d.new_count || 0, ca = d.cancelled_count || 0;
+          if (n > 0 || ca > 0) {
+            setBanner({ new: n, cancelled: ca });
+            playAlert();
+            const parts = [];
+            if (n > 0)  parts.push(`${n} new booking${n !== 1 ? "s" : ""}`);
+            if (ca > 0) parts.push(`${ca} cancelled`);
+            notifyDesktop("SeePlaces — new activity", parts.join(" · "));
+          }
+          await loadWorklist();
+        } catch (e) {
+          setErr(e.message || "Refresh failed");
+        } finally {
+          runningRef.current = false; setState("idle");
+        }
       }, [from, to, loadWorklist, intervalMs]);
 
       // 1-second ticker drives the countdown and the auto-check schedule.
@@ -1364,7 +1369,6 @@
               </button>
               <Btn onClick={doRefresh} loading={state === "running"} className="px-3 py-2 text-xs">Check now</Btn>
             </div>
-            {state === "running" && <div className="w-full"><ProgressCard logs={logs} /></div>}
             {err && <div className="w-full"><ErrorCard msg={err} /></div>}
           </div>
 
